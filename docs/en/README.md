@@ -7,7 +7,6 @@ Getting Started
 * [Installing PHP Censor](../../README.md#installing)
     * [Adding a virtual host](virtual_host.md)
     * [Run builds using a worker](workers/worker.md)
-    * [Run builds using cronjob](workers/cron.md) **[DEPRECATED]**
 * [Adding PHP Censor support to your projects](configuring_project.md)
 * [Updating PHP Censor](../../README.md#updating)
 * [Configuring PHP Censor](configuring_application.md)
@@ -91,8 +90,9 @@ Plugins
 * [HipChat](plugins/hipchat_notify.md) - `hipchat_notify`
 * [IRC](plugins/irc.md) - `irc`
 * [Slack](plugins/slack_notify.md) - `slack_notify`
-* [XMPP](plugins/xmpp.md) - `xmpp`
 * [Telegram](plugins/telegram.md) - `telegram`
+* [Webhook](plugins/webhook_notify.md) - `webhook_notify`
+* [XMPP](plugins/xmpp.md) - `xmpp`
 
 #### Other
 

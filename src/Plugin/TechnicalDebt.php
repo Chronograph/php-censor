@@ -130,7 +130,7 @@ class TechnicalDebt extends Plugin implements ZeroConfigPluginInterface
         }
 
         if (array_key_exists('allowed_errors', $options) && $options['allowed_errors']) {
-            $this->allowedErrors = (int) $options['allowed_errors'];
+            $this->allowedErrors = (int)$options['allowed_errors'];
         }
     }
 
@@ -194,7 +194,7 @@ class TechnicalDebt extends Plugin implements ZeroConfigPluginInterface
             foreach ($this->ignore as $ignore) {
                 $ignoreAbsolute = $this->builder->buildPath . $ignore;
 
-                if ('/' === $ignoreAbsolute{0}) {
+                if ('/' === $ignoreAbsolute[0]) {
                     if (0 === strpos($filePath, $ignoreAbsolute)) {
                         $ignored = true;
                         break;

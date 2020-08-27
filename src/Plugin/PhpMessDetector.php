@@ -127,7 +127,7 @@ class PhpMessDetector extends Plugin implements ZeroConfigPluginInterface
         $warnings = 0;
 
         foreach ($xml->file as $file) {
-            $fileName = (string) $file['name'];
+            $fileName = (string)$file['name'];
             $fileName = str_replace($this->builder->buildPath, '', $fileName);
 
             foreach ($file->violation as $violation) {
@@ -136,11 +136,11 @@ class PhpMessDetector extends Plugin implements ZeroConfigPluginInterface
                 $this->build->reportError(
                     $this->builder,
                     self::pluginName(),
-                    (string) $violation,
+                    (string)$violation,
                     PHPCensor\Model\BuildError::SEVERITY_HIGH,
                     $fileName,
-                    (int) $violation['beginline'],
-                    (int) $violation['endline']
+                    (int)$violation['beginline'],
+                    (int)$violation['endline']
                 );
             }
         }
@@ -191,8 +191,7 @@ class PhpMessDetector extends Plugin implements ZeroConfigPluginInterface
             $suffixes = ' --suffixes ' . implode(',', $this->suffixes);
         }
 
-        if ((!defined('DEBUG_MODE') || !DEBUG_MODE) &&
-            !(bool)$this->build->getExtra('debug')) {
+        if (!$this->build->isDebug()) {
             $this->builder->logExecOutput(false);
         }
 

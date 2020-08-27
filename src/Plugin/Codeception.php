@@ -61,16 +61,7 @@ class Codeception extends Plugin implements ZeroConfigPluginInterface
         }
 
         if (isset($options['args'])) {
-            $this->args = (string) $options['args'];
-        }
-
-        /** @deprecated Option "path" is deprecated and will be deleted in version 2.0. Use the option "output_path" instead. */
-        if (isset($options['path']) && !isset($options['output_path'])) {
-            $this->builder->logWarning(
-                '[DEPRECATED] Option "path" is deprecated and will be deleted in version 2.0. Use the option "output_path" instead.'
-            );
-
-            $options['output_path'] = $options['path'];
+            $this->args = (string)$options['args'];
         }
 
         if (isset($options['output_path'])) {

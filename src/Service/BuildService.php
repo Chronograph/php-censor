@@ -15,6 +15,7 @@ use PHPCensor\Model\Build;
 use PHPCensor\Model\Project;
 use PHPCensor\Store\BuildStore;
 use PHPCensor\Store\ProjectStore;
+use PHPCensor\Worker\BuildWorker;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -53,7 +54,7 @@ class BuildService
 
     /**
      * @param Project     $project
-     * @param string      $environment
+     * @param int|null    $environmentId
      * @param string      $commitId
      * @param string|null $branch
      * @param string|null $tag
@@ -67,27 +68,27 @@ class BuildService
      */
     public function createBuild(
         Project $project,
-        $environment,
+        $environmentId = null,
         $commitId = '',
         $branch = null,
         $tag = null,
         $committerEmail = null,
         $commitMessage = null,
         $source = Build::SOURCE_UNKNOWN,
-        $userId = 0,
+        $userId = null,
         $extra = null
     ) {
         $build = new Build();
         $build->setCreateDate(new DateTime());
         $build->setProjectId($project->getId());
         $build->setStatusPending();
-        $build->setEnvironment($environment);
+        $build->setEnvironmentid($environmentId);
 
         if (!is_null($extra)) {
             $build->setExtra($extra);
         }
 
-        $branches = $project->getBranchesByEnvironment($environment);
+        $branches = $project->getBranchesByEnvironment($environmentId);
         $build->addExtraValue('branches', $branches);
 
         $build->setSource($source);
@@ -117,9 +118,13 @@ class BuildService
         $buildId = $build->getId();
 
         if (!empty($buildId)) {
+            $project = $build->getProject();
             $build = BuildFactory::getBuild($build);
             $build->sendStatusPostback();
-            $this->addBuildToQueue($build);
+            $this->addBuildToQueue(
+                $build,
+                (null !== $project) ? $project->getBuildPriority() : Project::DEFAULT_BUILD_PRIORITY
+            );
         }
 
         return $build;
@@ -209,7 +214,7 @@ class BuildService
                         continue;
                     }
                 }
-                
+
                 $buildsCount++;
 
                 $this->createBuild(
@@ -253,7 +258,7 @@ class BuildService
         $build->setCommitterEmail($originalBuild->getCommitterEmail());
         $build->setCommitMessage($originalBuild->getCommitMessage());
         $build->setExtra($originalBuild->getExtra());
-        $build->setEnvironment($originalBuild->getEnvironment());
+        $build->setEnvironmentId($originalBuild->getEnvironmentId());
         $build->setSource($source);
         $build->setUserId($originalBuild->getUserId());
         $build->setCreateDate(new DateTime());
@@ -264,9 +269,13 @@ class BuildService
         $buildId = $build->getId();
 
         if (!empty($buildId)) {
-            $build = BuildFactory::getBuild($build);
+            $build   = BuildFactory::getBuild($build);
+            $project = $build->getProject();
             $build->sendStatusPostback();
-            $this->addBuildToQueue($build);
+            $this->addBuildToQueue(
+                $build,
+                (null !== $project) ? $project->getBuildPriority() : Project::DEFAULT_BUILD_PRIORITY
+            );
         }
 
         return $build;
@@ -281,7 +290,7 @@ class BuildService
     {
         $keepBuilds = (int)Config::getInstance()->get('php-censor.build.keep_builds', 100);
         $builds     = $this->buildStore->getOldByProject((int)$projectId, $keepBuilds);
-        
+
         /** @var Build $build */
         foreach ($builds['items'] as $build) {
             $build->removeBuildDirectory(true);
@@ -334,8 +343,9 @@ class BuildService
     /**
      * Takes a build and puts it into the queue to be run (if using a queue)
      * @param Build $build
+     * @param int   $buildPriority priority in queue relative to default
      */
-    public function addBuildToQueue(Build $build)
+    public function addBuildToQueue(Build $build, $buildPriority = Project::DEFAULT_BUILD_PRIORITY)
     {
         $buildId = $build->getId();
 
@@ -343,16 +353,26 @@ class BuildService
             return;
         }
 
+        $jobData = [
+            'build_id' => $buildId,
+        ];
+
+        $this->addJobToQueue(BuildWorker::JOB_TYPE_BUILD, $jobData, ($buildPriority + Project::OFFSET_BETWEEN_BUILD_AND_QUEUE));
+    }
+
+    /**
+     * @param string $jobType
+     * @param array  $jobData
+     * @param int    $queuePriority
+     */
+    public function addJobToQueue($jobType, array $jobData, $queuePriority = PheanstalkInterface::DEFAULT_PRIORITY)
+    {
         $config   = Config::getInstance();
         $settings = $config->get('php-censor.queue', []);
 
         if (!empty($settings['host']) && !empty($settings['name'])) {
+            $jobData['type'] = $jobType;
             try {
-                $jobData = [
-                    'type'     => 'php-censor.build',
-                    'build_id' => $build->getId(),
-                ];
-
                 $pheanstalk = new Pheanstalk(
                     $settings['host'],
                     $config->get('php-censor.queue.port', Pheanstalk::DEFAULT_PORT)
@@ -361,7 +381,7 @@ class BuildService
                 $pheanstalk->useTube($settings['name']);
                 $pheanstalk->put(
                     json_encode($jobData),
-                    PheanstalkInterface::DEFAULT_PRIORITY,
+                    $queuePriority,
                     PheanstalkInterface::DEFAULT_DELAY,
                     $config->get('php-censor.queue.lifetime', 600)
                 );

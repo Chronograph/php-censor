@@ -18,7 +18,6 @@ use PHPCensor\Plugin;
  */
 class Mage3 extends Plugin
 {
-    protected $mageBin = 'mage';
     protected $mageEnv;
     protected $mageLogDir;
 
@@ -37,10 +36,7 @@ class Mage3 extends Plugin
     {
         parent::__construct($builder, $build, $options);
 
-        $config = $builder->getSystemConfig('mage3');
-        if (!empty($config['bin'])) {
-            $this->mageBin = $config['bin'];
-        }
+        $this->executable = $this->builder->findBinary(['mage', 'mage.phar']);
 
         if (isset($options['env'])) {
             $this->mageEnv = $builder->interpolate($options['env']);
@@ -61,7 +57,7 @@ class Mage3 extends Plugin
             return false;
         }
 
-        $result = $this->builder->executeCommand($this->mageBin . ' -n deploy ' . $this->mageEnv);
+        $result = $this->builder->executeCommand($this->executable . ' -n deploy ' . $this->mageEnv);
 
         try {
             $this->builder->log('########## MAGE LOG BEGIN ##########');

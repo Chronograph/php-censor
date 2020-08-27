@@ -11,7 +11,7 @@ class WebhookControllerTest extends TestCase
     {
         $webController = new WebhookController(
             $this->prophesize('PHPCensor\Config')->reveal(),
-            $this->prophesize('PHPCensor\Http\Request')->reveal(),
+            $this->prophesize('Symfony\Component\HttpFoundation\Request')->reveal(),
             $this->prophesize('PHPCensor\Http\Response')->reveal()
         );
 
@@ -25,10 +25,5 @@ class WebhookControllerTest extends TestCase
         self::assertEquals('failed', $responseData['body']['status']);
 
         self::assertEquals('application/json', $responseData['headers']['Content-Type']);
-
-        // @todo: we can't text the result is JSON file with
-        //   self::assertJson((string) $error);
-        // since the flush method automatically add the header and break the
-        // testing framework.
     }
 }

@@ -85,7 +85,7 @@ class PhpCsFixer extends Plugin
                 $this->reportErrors = true;
             }
 
-            $this->allowedWarnings = isset($options['allowed_warnings']) ? (int) $options['allowed_warnings'] : 0;
+            $this->allowedWarnings = isset($options['allowed_warnings']) ? (int)$options['allowed_warnings'] : 0;
         }
     }
 
@@ -134,10 +134,14 @@ class PhpCsFixer extends Plugin
             if ($this->supportsUdiff) {
                 $this->args .= ' --diff-format udiff';
             }
+            if (!$this->build->isDebug()) {
+                $this->builder->logExecOutput(false); // do not show json output
+            }
         }
 
         $cmd     = $phpCsFixer . ' fix ' . $directory . ' %s';
         $success = $this->builder->executeCommand($cmd, $this->args);
+        $this->builder->logExecOutput(true);
         $output  = $this->builder->getLastOutput();
 
         if ($this->errors) {

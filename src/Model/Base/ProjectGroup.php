@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace PHPCensor\Model\Base;
 
 use DateTime;
@@ -16,7 +18,7 @@ class ProjectGroup extends Model
         'id'          => null,
         'title'       => null,
         'create_date' => null,
-        'user_id'     => 0,
+        'user_id'     => null,
     ];
 
     /**
@@ -31,14 +33,9 @@ class ProjectGroup extends Model
      * @param int $value
      *
      * @return bool
-     *
-     * @throws InvalidArgumentException
      */
-    public function setId($value)
+    public function setId(int $value)
     {
-        $this->validateNotNull('id', $value);
-        $this->validateInt('id', $value);
-
         if ($this->data['id'] === $value) {
             return false;
         }
@@ -60,14 +57,9 @@ class ProjectGroup extends Model
      * @param string $value
      *
      * @return bool
-     *
-     * @throws InvalidArgumentException
      */
-    public function setTitle($value)
+    public function setTitle(string $value)
     {
-        $this->validateNotNull('title', $value);
-        $this->validateString('title', $value);
-
         if ($this->data['title'] === $value) {
             return false;
         }
@@ -110,25 +102,20 @@ class ProjectGroup extends Model
     }
 
     /**
-     * @return string
+     * @return string|null
      */
     public function getUserId()
     {
-        return (int)$this->data['user_id'];
+        return $this->data['user_id'];
     }
 
     /**
-     * @param int $value
+     * @param int|null $value
      *
      * @return bool
-     *
-     * @throws InvalidArgumentException
      */
-    public function setUserId($value)
+    public function setUserId(?int $value)
     {
-        $this->validateNotNull('user_id', $value);
-        $this->validateInt('user_id', $value);
-
         if ($this->data['user_id'] === $value) {
             return false;
         }

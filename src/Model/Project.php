@@ -239,35 +239,69 @@ class Project extends BaseProject
      */
     public function getEnvironmentsNamesByBranch($branch)
     {
-        $environmentsNames = [];
+        $environmentsIds = [];
         $environments      = $this->getEnvironmentsObjects();
-        $defaultBranch     = ($branch == $this->getDefaultBranch());
+        $defaultBranch     = ($branch === $this->getDefaultBranch());
         foreach ($environments['items'] as $environment) {
             /** @var Environment $environment */
             if ($defaultBranch || in_array($branch, $environment->getBranches())) {
-                $environmentsNames[] = $environment->getName();
+                $environmentsIds[] = $environment->getId();
             }
         }
 
-        return $environmentsNames;
+        return $environmentsIds;
     }
 
     /**
-     * @param string $environmentName
+     * @param int $environmentId
      *
      * @return string[]
      */
-    public function getBranchesByEnvironment($environmentName)
+    public function getBranchesByEnvironment($environmentId)
     {
         $branches     = [];
         $environments = $this->getEnvironmentsObjects();
         foreach ($environments['items'] as $environment) {
             /** @var Environment $environment */
-            if ($environmentName == $environment->getName()) {
+            if ($environmentId == $environment->getId()) {
                 return $environment->getBranches();
             }
         }
 
         return $branches;
+    }
+
+    /**
+     * @return int
+     */
+    public function getBuildPriority()
+    {
+        $config = $this->getBuildConfig();
+
+        if (!$config) {
+            return self::DEFAULT_BUILD_PRIORITY;
+        }
+
+        $yamlParser = new YamlParser();
+        $parsed     = $yamlParser->parse($config);
+
+        if (
+            !isset($parsed['build_settings']['build_priority']) ||
+            !(int)$parsed['build_settings']['build_priority']
+        ) {
+            return self::DEFAULT_BUILD_PRIORITY;
+        }
+
+        $priority = (int)$parsed['build_settings']['build_priority'];
+
+        if ($priority > self::MAX_BUILD_PRIORITY) {
+            return self::MAX_BUILD_PRIORITY;
+        }
+
+        if ($priority < self::MIN_BUILD_PRIORITY) {
+            return self::MIN_BUILD_PRIORITY;
+        }
+
+        return $priority;
     }
 }

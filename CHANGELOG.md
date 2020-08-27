@@ -1,73 +1,44 @@
-Changelog 1.1
+Changelog 2.0
 =============
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) and this project adheres to 
 [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
-## [1.1.1 (Birdperson)](https://github.com/php-censor/php-censor/tree/1.1.1) (2019-06-15)
+## [2.0.0 (Rick Sanchez)](https://github.com/php-censor/php-censor/tree/2.0.0) (2019-xx-xx)
 
-[Full Changelog](https://github.com/php-censor/php-censor/compare/1.1.0...1.1.1)
-
-### Added
-
-- `FUNDING.yml` config for GitHub.
-
-### Fixed
-
-- Information about versions in `README.md` file.
-- Potential bug with `Symfony\Component\Process\Process::_construct` parameter `cwd`.
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.2.0...2.0.0)
 
 ### Changed
 
-- Updated dependencies.
+- **Minimal PHP version increased to 7.1 (from 5.6)**.
 
+### Removed
 
-## [1.1.0 (Birdperson)](https://github.com/php-censor/php-censor/tree/1.1.0) (2019-05-25)
-
-[Full Changelog](https://github.com/php-censor/php-censor/compare/1.0.10...1.1.0)
-
-**Release includes all changes from release 1.0.10 and additionally:**
-
-### Added
-
-- Phlint plugin. Pull request [#280](https://github.com/php-censor/php-censor/pull/280). Thanks to 
-[@panosru](https://github.com/panosru).
-- Phpstan plugin. Pull request [#279](https://github.com/php-censor/php-censor/pull/279). Thanks to 
-[@panosru](https://github.com/panosru).
-- Pahout plugin. Pull request [#278](https://github.com/php-censor/php-censor/pull/278). Thanks to 
-[@panosru](https://github.com/panosru).
-- Psalm plugin. Pull request [#277](https://github.com/php-censor/php-censor/pull/277). Thanks to 
-[@panosru](https://github.com/panosru).
-- BitbucketNotify plugin. Pull request [#302](https://github.com/php-censor/php-censor/pull/302). Thanks to 
-[@EugenGanshorn](https://github.com/EugenGanshorn).
-- BitBucket Server project source (Like Github, Bitbucket, etc.). Pull request 
-[#286](https://github.com/php-censor/php-censor/pull/286). Thanks to [@fejal](https://github.com/fejal).
-- PostgreSQL `SSLMODE` connection option. Pull request [#283](https://github.com/php-censor/php-censor/pull/283). 
-Thanks to [@mikebronner](https://github.com/mikebronner).
-- New build sources for rebuild from WEB and CLI with pointer to parent build. Issue 
-[#272](https://github.com/php-censor/php-censor/issues/272).
-- Some additional types for Github (Git type) and Bitbucket (Git and Hg types) webhooks. Issue 
-[#284](https://github.com/php-censor/php-censor/issues/284).
-
-### Fixed
-
-- Webhook for private Bitbucket repositories. Pull request [#281](https://github.com/php-censor/php-censor/pull/281). 
-Thanks to [@EduardMalik](https://github.com/EduardMalik).
-- Environment variables for child processes. Issue [#212](https://github.com/php-censor/php-censor/issues/212), 
-[#261](https://github.com/php-censor/php-censor/issues/261). Pull requests 
-[#269](https://github.com/php-censor/php-censor/pull/269), [#250](https://github.com/php-censor/php-censor/pull/250). 
-Thanks to [@jwmwalrus](https://github.com/jwmwalrus).
-
-### Changed
-
-- Flushing errors before executing stage `complete` to make them available for `complete` stage plugins. Pull request 
-[#294](https://github.com/php-censor/php-censor/pull/294). Thanks to [@EugenGanshorn](https://github.com/EugenGanshorn).
-- **Configuration section `b8.database` is deprecated. Use instead section `php-censor.database`. Issue 
-[#289](https://github.com/php-censor/php-censor/issues/289)**.
+- **Deprecatins from versions 1.x**:
+    - Cronjob worker: "php-censor:run-builds" (Use daemon worker instead: "php-censor:worker").
+    - Project configs "phpci.yml" and ".phpci.yml" (use ".php-censor.yml" instead).
+    - "PHPCI_*" interpolation and env variables (Use "PHP_CENSOR_*" instead).
+    - Global application config section "b8.database" (Use "php-censor.database" instead).
+    - [Codeception] Option "path" (Use option "output_path" instead).
+    - [Grunt] Option "grunt" (Use options "binary_path" and "binary_name" instead).
+    - [Gulp] Option "gulp" (Use options "binary_path" and "binary_name" instead).
+    - [PHPCodeSniffer] Option "path" (Use option "directory" instead).
+    - [PHPCpd] Option "path" (Use option "directory" instead).
+    - [PHPDocblockChecker] Option "path" (Use option "directory" instead).
+    - [PHPMessDetector] Option "path" (Use option "directory" instead).
+    - [PHPUnit] Option "directory" (Use option "directories" instead).
+    - [Shell] Option "command" and commands list without any named option. Use option "commands" instead.
+    - [PackageBuild] Special variables for plugin ("%build.commit%", "%build.id%", "%build.branch%", "%project.title%", "%date%" and "%time%"). Use interpolated variables instead ("%COMMIT_ID%", "%BUILD_ID%", "%BRANCH%", "%PROJECT_TITLE%", "%CURRENT_DATE%", "CURRENT_TIME").
+    - [MySQL and PostgreSQL] Options "pass" for plugins MySQL and PostgreSQL. Use option "password" instead.
+    - [MySQL, PostgreSQL, SQLite] Queries list without option for plugins MySQL, PostgreSQL and SQLite. Use the options "queries" instead.
+    - [MySQL] Imports list without option for plugin MySQL. Use the options "imports" instead.
+    - [Mage, Mage3] Section "mage" and "mage3" in the global application config and option "bin". Use the plugin options "binary_path" and "binary_name" instead.
 
 
 ## Other versions
 
 - [0.x Changelog](/docs/CHANGELOG_0.x.md)
 - [1.0 Changelog](/docs/CHANGELOG_1.0.md)
+- [1.1 Changelog](/docs/CHANGELOG_1.1.md)
+- [1.2 Changelog](/docs/CHANGELOG_1.2.md)

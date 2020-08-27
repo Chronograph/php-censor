@@ -14,14 +14,15 @@
 **PHP Censor** is an open source, self-hosted, continuous integration server for PHP projects 
 ([PHPCI](https://www.phptesting.org) fork). [Official twitter @php_censor](https://twitter.com/php_censor).
 
-Actual PHP Censor versions and release branches:
+PHP Censor versions:
 
-| Version            | Branch            | Status                            | Minimal PHP Version |
-| :----------------- | :-------------    | :-------------------------------- | :------------------ |
-| `1.0`              | `release-1.0`     | Last stable version               | `5.6`               |
-| `1.1`              | `release-1.1`     | Current stable version            | `5.6`               |
-| `1.2`              | `master`          | Future stable minor version (WIP) | `5.6`               |
-| `2.0`              | `pre-release-2.0` | Future stable major version (WIP) | `7.1`               |
+| Version | Branch        | Status                              | Minimal PHP Version |
+|:-------:|:-------------:|:------------------------------------|:-------------------:|
+| `1.0`   | `release-1.0` | Old version (Unsupported)           | `5.6`               |
+| `1.1`   | `release-1.1` | Old version (Unsupported)           | `5.6`               |
+| `1.2`   | `release-1.2` | Current stable version (Only fixes) | `5.6`               |
+| `2.0`   | `master`      | Next major version (WIP)            | `7.1`               |
+
 
 [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
@@ -44,7 +45,7 @@ More [screenshots](docs/en/screenshots.md).
 
 * Unix-like OS (**Windows isn't supported**);
 
-* PHP 5.6+ (with OpenSSL support and enabled functions: `exec()`, `shell_exec()` and `proc_open()`);
+* PHP 7.1+ (with OpenSSL support and enabled functions: `exec()`, `shell_exec()` and `proc_open()`);
 
 * Web-server (Nginx or Apache2);
 
@@ -123,7 +124,6 @@ cd ./php-censor.local
 
 # Non-interactive installation
 ./bin/console php-censor:install \
-    --url='http://php-censor.local' \
     --db-type=pgsql \
     --db-host=localhost \
     --db-pgsql-sslmode=prefer \
@@ -134,7 +134,6 @@ cd ./php-censor.local
     --admin-name=admin \
     --admin-password=admin \
     --admin-email='admin@php-censor.local' \
-    --queue-use=1 \
     --queue-host=localhost \
     --queue-port=11300 \
     --queue-name=php-censor

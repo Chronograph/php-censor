@@ -18,7 +18,7 @@ class BuildStore extends Store
     /**
      * @var string
      */
-    protected $tableName  = 'build';
+    protected $tableName  = 'builds';
 
     /**
      * @var string
@@ -287,7 +287,7 @@ class BuildStore extends Store
                 {{committer_email}},
                 {{commit_message}},
                 {{extra}},
-                {{environment}},
+                {{environment_id}},
                 {{tag}}
             FROM {{' . $this->tableName . '}}
             ORDER BY {{id}} DESC
@@ -303,7 +303,7 @@ class BuildStore extends Store
             $latest   = [];
             foreach ($res as $item) {
                 $projectId = $item['project_id'];
-                $environment = $item['environment'];
+                $environment = $item['environment_id'];
                 if (empty($projects[$projectId])) {
                     $projects[$projectId] = [];
                 }
@@ -421,7 +421,7 @@ class BuildStore extends Store
     public function getMeta($key, $projectId, $buildId = null, $branch = null, $numResults = 1)
     {
         $query = 'SELECT bm.build_id, bm.meta_key, bm.meta_value
-                    FROM {{build_meta}} AS {{bm}}
+                    FROM {{build_metas}} AS {{bm}}
                     LEFT JOIN {{' . $this->tableName . '}} AS {{b}} ON b.id = bm.build_id
                     WHERE bm.meta_key = :key AND b.project_id = :projectId';
 
@@ -517,13 +517,21 @@ class BuildStore extends Store
         return $q->rowCount();
     }
 
+    /**
+     * @param int $projectId
+     * @param int $keep
+     *
+     * @return array
+     *
+     * @throws HttpException
+     */
     public function getOldByProject($projectId, $keep = 100)
     {
         if (is_null($projectId)) {
             throw new HttpException('Value passed to ' . __FUNCTION__ . ' cannot be null.');
         }
 
-        $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{project_id}} = :project_id ORDER BY {{create_date}} DESC OFFSET :keep';
+        $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{project_id}} = :project_id ORDER BY {{create_date}} DESC LIMIT 1000000 OFFSET :keep';
         $stmt = Database::getConnection('read')->prepareCommon($query);
         $stmt->bindValue(':project_id', $projectId);
         $stmt->bindValue(':keep', (int)$keep, PDO::PARAM_INT);
@@ -539,9 +547,9 @@ class BuildStore extends Store
             $count = count($rtn);
 
             return ['items' => $rtn, 'count' => $count];
-        } else {
-            return ['items' => [], 'count' => 0];
         }
+
+        return ['items' => [], 'count' => 0];
     }
 
     /**
@@ -553,7 +561,7 @@ class BuildStore extends Store
      */
     public function getNewErrorsCount($buildId)
     {
-        $query = 'SELECT COUNT(*) AS {{total}} FROM {{build_error}} WHERE {{build_id}} = :build_id AND {{is_new}} = true';
+        $query = 'SELECT COUNT(*) AS {{total}} FROM {{build_errors}} WHERE {{build_id}} = :build_id AND {{is_new}} = true';
 
         $stmt = Database::getConnection('read')->prepareCommon($query);
 
@@ -577,7 +585,7 @@ class BuildStore extends Store
      */
     public function getErrorsCount($buildId)
     {
-        $query = 'SELECT COUNT(*) AS {{total}} FROM {{build_error}} WHERE {{build_id}} = :build_id';
+        $query = 'SELECT COUNT(*) AS {{total}} FROM {{build_errors}} WHERE {{build_id}} = :build_id';
 
         $stmt = Database::getConnection('read')->prepareCommon($query);
 
@@ -605,7 +613,7 @@ class BuildStore extends Store
     {
         $query = '
 SELECT b.id AS {{build_id}}, count(be.id) AS {{count}} FROM {{' . $this->tableName . '}} AS b
-LEFT JOIN {{build_error}} AS be
+LEFT JOIN {{build_errors}} AS be
 ON b.id = be.build_id
 WHERE b.project_id = :project_id AND b.branch = :branch AND b.id <= :build_id
 GROUP BY b.id
@@ -620,8 +628,8 @@ LIMIT 2';
 
         if ($stmt->execute()) {
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            return [];
         }
+
+        return [];
     }
 }

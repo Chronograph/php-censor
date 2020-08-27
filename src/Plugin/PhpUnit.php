@@ -58,11 +58,14 @@ class PhpUnit extends Plugin implements ZeroConfigPluginInterface
 
     /**
      * Standard Constructor
-     * $options['config']    Path to a PHPUnit XML configuration file.
-     * $options['run_from']  The directory where the phpunit command will run from when using 'config'.
-     * $options['coverage']  Value for the --coverage-html command line flag.
-     * $options['directory'] Optional directory or list of directories to run PHPUnit on.
-     * $options['args']      Command line args (in string format) to pass to PHP Unit
+     * $options['config']                       Path to a PHPUnit XML configuration file.
+     * $options['run_from']                     The directory where the phpunit command will run from when using 'config'.
+     * $options['coverage']                     Value for the --coverage-html command line flag.
+     * $options['required_classes_coverage']    Optional required classes coverage percentage
+     * $options['required_methods_coverage']    Optional required methods coverage percentage
+     * $options['required_lines_coverage']      Optional required lines coverage percentage
+     * $options['directory']                    Optional directory or list of directories to run PHPUnit on.
+     * $options['args']                         Command line args (in string format) to pass to PHP Unit
      *
      * @param Builder  $builder
      * @param Build    $build
@@ -97,11 +100,13 @@ class PhpUnit extends Plugin implements ZeroConfigPluginInterface
 
     /**
      * Runs PHP Unit tests in a specified directory, optionally using specified config file(s).
+     *
+     * @return bool
      */
     public function execute()
     {
         $xmlConfigFiles = $this->options->getConfigFiles($this->build->getBuildPath());
-        $directories    = $this->options->getDirectories($this->builder);
+        $directories    = $this->options->getDirectories();
         if (empty($xmlConfigFiles) && empty($directories)) {
             $this->builder->logFailure('Neither a configuration file nor a test directory found.');
             return false;
@@ -147,7 +152,7 @@ class PhpUnit extends Plugin implements ZeroConfigPluginInterface
      */
     protected function runConfig($directory, $configFile, $logFormat)
     {
-        $allowPublicArtifacts = (bool) Config::getInstance()->get(
+        $allowPublicArtifacts = (bool)Config::getInstance()->get(
             'php-censor.build.allow_public_artifacts',
             false
         );
@@ -185,43 +190,86 @@ class PhpUnit extends Plugin implements ZeroConfigPluginInterface
         $cmd       = $this->executable . ' %s %s';
         $success   = $this->builder->executeCommand($cmd, $arguments, $directory);
         $output    = $this->builder->getLastOutput();
+        $covHtmlOk = false;
 
-        if ($fileSystem->exists($this->buildLocation) &&
+        if ($fileSystem->exists($this->buildLocation.'/index.html') &&
             $options->getOption('coverage') &&
             $allowPublicArtifacts) {
+            $covHtmlOk = true;
             $fileSystem->remove($this->buildBranchLocation);
             $fileSystem->mirror($this->buildLocation, $this->buildBranchLocation);
         }
 
         $this->processResults($logFile, $logFormat);
 
-        $config = $this->builder->getSystemConfig('php-censor');
-
         if ($options->getOption('coverage')) {
-            preg_match(
-                '#Classes:[\s]*(.*?)%[^M]*?Methods:[\s]*(.*?)%[^L]*?Lines:[\s]*(.*?)\%#s',
-                $output,
-                $matches
-            );
+            $currentCoverage = $this->extractCoverage($output);
+            $this->build->storeMeta((self::pluginName() . '-coverage'), $currentCoverage);
 
-            $this->build->storeMeta((self::pluginName() . '-coverage'), [
-                'classes' => !empty($matches[1]) ? $matches[1] : '0.00',
-                'methods' => !empty($matches[2]) ? $matches[2] : '0.00',
-                'lines'   => !empty($matches[3]) ? $matches[3] : '0.00',
-            ]);
-
-            if ($allowPublicArtifacts) {
+            if ($covHtmlOk) {
                 $this->builder->logSuccess(
                     sprintf(
                         "\nPHPUnit successful build coverage report.\nYou can use coverage report for this build: %s\nOr coverage report for last build in the branch: %s",
-                        $config['url'] . '/artifacts/phpunit/' . $this->buildDirectory . '/index.html',
-                        $config['url'] . '/artifacts/phpunit/' . $this->buildBranchDirectory . '/index.html'
+                        APP_URL . 'artifacts/phpunit/' . $this->buildDirectory . '/index.html',
+                        APP_URL . 'artifacts/phpunit/' . $this->buildBranchDirectory . '/index.html'
+                    )
+                );
+            } elseif ($allowPublicArtifacts) {
+                $this->builder->logFailure(
+                    sprintf(
+                        "\nPHPUnit could not build coverage report.\nmissing: %s\nlast of this branch: %s",
+                        APP_URL . 'artifacts/phpunit/' . $this->buildDirectory . '/index.html',
+                        APP_URL . 'artifacts/phpunit/' . $this->buildBranchDirectory . '/index.html'
                     )
                 );
             }
+
+            return $this->checkRequiredCoverage($currentCoverage);
         }
 
         return $success;
+    }
+
+    /**
+     * Extracts coverage from output
+     *
+     * @param string $output
+     *
+     * @return array
+     */
+    protected function extractCoverage($output)
+    {
+        preg_match(
+            '#Classes:[\s]*(.*?)%[^M]*?Methods:[\s]*(.*?)%[^L]*?Lines:[\s]*(.*?)\%#s',
+            $output,
+            $matches
+        );
+
+        return [
+            'classes' => !empty($matches[1]) ? $matches[1] : '0.00',
+            'methods' => !empty($matches[2]) ? $matches[2] : '0.00',
+            'lines'   => !empty($matches[3]) ? $matches[3] : '0.00',
+        ];
+    }
+
+    /**
+     * Checks required test coverage
+     *
+     * @param array $coverage
+     *
+     * @return bool
+     */
+    protected function checkRequiredCoverage($coverage)
+    {
+        foreach ($coverage as $key => $currentValue) {
+            if ($requiredValue = $this->options->getOption(implode('_', ['required', $key, 'coverage']))) {
+                if (bccomp($requiredValue, $currentValue) === 1) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

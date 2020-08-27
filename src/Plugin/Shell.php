@@ -14,14 +14,11 @@ use PHPCensor\Plugin;
 class Shell extends Plugin
 {
     /**
-     * @var array
-     */
-    protected $args;
-
-    /**
      * @var string[] $commands The commands to be executed
      */
     protected $commands = [];
+
+    protected $executeAll = false;
 
     /**
      * @return string
@@ -30,7 +27,7 @@ class Shell extends Plugin
     {
         return 'shell';
     }
-    
+
     /**
      * {@inheritdoc}
      */
@@ -38,22 +35,14 @@ class Shell extends Plugin
     {
         parent::__construct($builder, $build, $options);
 
-        if (isset($options['command'])) {
-            // Keeping this for backwards compatibility, new projects should use interpolation vars.
-            $options['command'] = str_replace("%buildpath%", $this->builder->buildPath, $options['command']);
-            $this->commands = [$options['command']];
-            return;
+        if (array_key_exists('execute_all', $options) && $options['execute_all']) {
+            $this->executeAll = true;
         }
 
-        /*
-         * Support the new syntax:
-         *
-         * shell:
-         *     - "cd /www"
-         *     - "rm -f file.txt"
-         */
-        if (is_array($options)) {
-            $this->commands = $options;
+        if (isset($options['commands']) && is_array($options['commands'])) {
+            $this->commands = $options['commands'];
+
+            return;
         }
     }
 
@@ -64,14 +53,19 @@ class Shell extends Plugin
      */
     public function execute()
     {
+        $result = true;
         foreach ($this->commands as $command) {
             $command = $this->builder->interpolate($command);
 
             if (!$this->builder->executeCommand($command)) {
-                return false;
+                $result = false;
+
+                if (!$this->executeAll) {
+                    return $result;
+                }
             }
         }
 
-        return true;
+        return $result;
     }
 }

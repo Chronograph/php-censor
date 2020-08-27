@@ -31,7 +31,7 @@ class ProjectTest extends TestCase
             'archived'               => 0,
             'group_id'               => 1,
             'create_date'            => null,
-            'user_id'                => 0,
+            'user_id'                => null,
         ], $project->getDataArray());
     }
 
