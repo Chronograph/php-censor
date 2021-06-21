@@ -1,126 +1,99 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor;
 
 use DateTime;
 use Exception;
+use PHPCensor\Common\Exception\RuntimeException;
 use PHPCensor\Helper\BuildInterpolator;
-use PHPCensor\Helper\MailerFactory;
+use PHPCensor\Helper\CommandExecutorInterface;
 use PHPCensor\Logging\BuildLogger;
 use PHPCensor\Model\Build;
 use PHPCensor\Plugin\Util\Executor;
 use PHPCensor\Plugin\Util\Factory as PluginFactory;
 use PHPCensor\Store\BuildErrorWriter;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
-use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
 /**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
-class Builder implements LoggerAwareInterface
+class Builder
 {
-    /**
-     * @var string
-     */
-    public $buildPath;
+    public string $buildPath = '';
 
     /**
      * @var string[]
      */
-    public $ignore = [];
+    public array $ignore = [];
 
-    /**
-     * @var string[]
-     */
-    public $binaryPath = '';
+    public string $binaryPath = '';
 
-    /**
-     * @var string[]
-     */
-    public $priorityPath = 'local';
+    public string $priorityPath = 'local';
 
-    /**
-     * @var string
-     */
-    public $directory;
+    public string $directory = '';
 
-    /**
-     * @var string|null
-     */
-    protected $currentStage = null;
+    protected ?string $currentStage = null;
 
-    /**
-     * @var bool
-     */
-    protected $verbose = true;
+    protected bool $verbose = true;
 
-    /**
-     * @var Build
-     */
-    protected $build;
+    protected Build $build;
 
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
+    protected LoggerInterface $logger;
 
-    /**
-     * @var array
-     */
-    protected $config = [];
+    protected array $config = [];
 
-    /**
-     * @var string
-     */
-    protected $lastOutput;
+    protected BuildInterpolator $interpolator;
 
-    /**
-     * @var BuildInterpolator
-     */
-    protected $interpolator;
+    protected BuildStore $store;
 
-    /**
-     * @var BuildStore
-     */
-    protected $store;
+    protected Executor $pluginExecutor;
 
-    /**
-     * @var Executor
-     */
-    protected $pluginExecutor;
+    protected CommandExecutorInterface $commandExecutor;
 
-    /**
-     * @var Helper\CommandExecutorInterface
-     */
-    protected $commandExecutor;
+    protected BuildLogger $buildLogger;
 
-    /**
-     * @var Logging\BuildLogger
-     */
-    protected $buildLogger;
+    private BuildErrorWriter $buildErrorWriter;
 
-    /**
-     * @var BuildErrorWriter
-     */
-    private $buildErrorWriter;
+    private ConfigurationInterface $configuration;
 
-    /**
-     * Set up the builder.
-     *
-     * @param Build $build
-     * @param LoggerInterface        $logger
-     */
-    public function __construct(Build $build, LoggerInterface $logger = null)
-    {
+    private DatabaseManager $databaseManager;
+
+    private StoreRegistry $storeRegistry;
+
+    public function __construct(
+        ConfigurationInterface $configuration,
+        DatabaseManager $databaseManager,
+        StoreRegistry $storeRegistry,
+        Build $build,
+        LoggerInterface $logger = null
+    ) {
+        $this->configuration   = $configuration;
+        $this->databaseManager = $databaseManager;
+        $this->storeRegistry   = $storeRegistry;
+
         $this->build = $build;
-        $this->store = Factory::getStore('Build');
+
+        /** @var BuildStore $buildStore */
+        $buildStore  = $this->storeRegistry->get('Build');
+        $this->store = $buildStore;
 
         $this->buildLogger    = new BuildLogger($logger, $build);
         $pluginFactory        = $this->buildPluginFactory($build);
-        $this->pluginExecutor = new Plugin\Util\Executor($pluginFactory, $this->buildLogger);
+
+        $this->pluginExecutor = new Plugin\Util\Executor(
+            $this->storeRegistry,
+            $pluginFactory,
+            $this->buildLogger,
+            $buildStore
+        );
 
         $executorClass         = 'PHPCensor\Helper\CommandExecutor';
         $this->commandExecutor = new $executorClass(
@@ -129,22 +102,27 @@ class Builder implements LoggerAwareInterface
             $this->verbose
         );
 
-        $this->interpolator     = new BuildInterpolator();
-        $this->buildErrorWriter = new BuildErrorWriter($this->build->getProjectId(), $this->build->getId());
+        $this->interpolator     = new BuildInterpolator($this->storeRegistry);
+        $this->buildErrorWriter = new BuildErrorWriter(
+            $this->configuration,
+            $this->databaseManager,
+            $this->storeRegistry,
+            $this->build->getProjectId(),
+            $this->build->getId()
+        );
     }
 
-    /**
-     * @return BuildLogger
-     */
-    public function getBuildLogger()
+    public function getBuildLogger(): BuildLogger
     {
         return $this->buildLogger;
     }
 
-    /**
-     * @return null|string
-     */
-    public function getCurrentStage()
+    public function getConfiguration(): ConfigurationInterface
+    {
+        return $this->configuration;
+    }
+
+    public function getCurrentStage(): ?string
     {
         return $this->currentStage;
     }
@@ -153,10 +131,8 @@ class Builder implements LoggerAwareInterface
      * Set the config array, as read from .php-censor.yml
      *
      * @param array $config
-     *
-     * @throws Exception
      */
-    public function setConfig(array $config)
+    public function setConfig(array $config): void
     {
         $this->config = $config;
     }
@@ -164,11 +140,11 @@ class Builder implements LoggerAwareInterface
     /**
      * Access a variable from the .php-censor.yml file.
      *
-     * @param string $key
+     * @param string|null $key
      *
      * @return mixed
      */
-    public function getConfig($key = null)
+    public function getConfig(?string $key = null)
     {
         $value = null;
         if (null === $key) {
@@ -187,26 +163,12 @@ class Builder implements LoggerAwareInterface
      *
      * @return mixed
      */
-    public function getSystemConfig($key)
+    public function getSystemConfig(string $key)
     {
-        return Config::getInstance()->get($key);
+        return $this->configuration->get($key);
     }
 
-    /**
-     * @return string The title of the project being built.
-     *
-     * @throws Exception\HttpException
-     */
-    public function getBuildProjectTitle()
-    {
-        return $this->build->getProject()->getTitle();
-    }
-
-    /**
-     * @throws Exception\HttpException
-     * @throws Exception\InvalidArgumentException
-     */
-    public function execute()
+    public function execute(): void
     {
         $this->build->setStatusRunning();
         $this->build->setStartDate(new DateTime());
@@ -292,7 +254,7 @@ class Builder implements LoggerAwareInterface
         $this->build->sendStatusPostback();
         $this->build->setFinishDate(new DateTime());
 
-        $removeBuilds = (bool)Config::getInstance()->get('php-censor.build.remove_builds', true);
+        $removeBuilds = (bool)$this->configuration->get('php-censor.build.remove_builds', true);
         if ($removeBuilds) {
             // Clean up:
             $this->buildLogger->log('');
@@ -307,11 +269,7 @@ class Builder implements LoggerAwareInterface
         $this->store->save($this->build);
     }
 
-    /**
-     * @throws Exception\HttpException
-     * @throws Exception\InvalidArgumentException
-     */
-    protected function setErrorTrend()
+    protected function setErrorTrend(): void
     {
         $this->build->setErrorsTotal($this->store->getErrorsCount($this->build->getId()));
 
@@ -337,11 +295,11 @@ class Builder implements LoggerAwareInterface
     /**
      * Used by this class, and plugins, to execute shell commands.
      *
-     * @param array ...$params
+     * @param ...$params
      *
      * @return bool
      */
-    public function executeCommand(...$params)
+    public function executeCommand(...$params): bool
     {
         return $this->commandExecutor->executeCommand($params);
     }
@@ -351,7 +309,7 @@ class Builder implements LoggerAwareInterface
      *
      * @return string
      */
-    public function getLastOutput()
+    public function getLastOutput(): string
     {
         return $this->commandExecutor->getLastOutput();
     }
@@ -361,7 +319,7 @@ class Builder implements LoggerAwareInterface
      *
      * @param bool $enableLog
      */
-    public function logExecOutput($enableLog = true)
+    public function logExecOutput(bool $enableLog = true): void
     {
         $this->commandExecutor->logExecOutput = $enableLog;
     }
@@ -373,11 +331,12 @@ class Builder implements LoggerAwareInterface
      * @param string       $priorityPath
      * @param string       $binaryPath
      * @param array        $binaryName
+     *
      * @return string
      *
      * @throws Exception when no binary has been found.
      */
-    public function findBinary($binary, $priorityPath = 'local', $binaryPath = '', $binaryName = [])
+    public function findBinary($binary, string $priorityPath = 'local', string $binaryPath = '', array $binaryName = []): string
     {
         return $this->commandExecutor->findBinary($binary, $priorityPath, $binaryPath, $binaryName);
     }
@@ -390,7 +349,7 @@ class Builder implements LoggerAwareInterface
      *
      * @return string
      */
-    public function interpolate($input)
+    public function interpolate(string $input): string
     {
         return $this->interpolator->interpolate($input);
     }
@@ -402,24 +361,29 @@ class Builder implements LoggerAwareInterface
      *
      * @return bool
      */
-    protected function setupBuild()
+    protected function setupBuild(): bool
     {
-        $this->buildPath = $this->build->getBuildPath();
+        $this->buildPath = (string)$this->build->getBuildPath();
 
         $this->commandExecutor->setBuildPath($this->buildPath);
 
         $this->build->handleConfigBeforeClone($this);
 
+        $workingCopySuccess = true;
         // Create a working copy of the project:
         if (!$this->build->createWorkingCopy($this, $this->buildPath)) {
-            throw new Exception('Could not create a working copy.');
+            $workingCopySuccess = false;
         }
 
-        chdir($this->buildPath);
+        \chdir($this->buildPath);
+
+        $version = (string)\trim(\file_get_contents(ROOT_DIR . 'VERSION.md'));
+        $version = !empty($version) ? $version : '0.0.0 (UNKNOWN)';
 
         $this->interpolator->setupInterpolationVars(
             $this->build,
-            APP_URL
+            APP_URL,
+            $version
         );
 
         // Does the project's .php-censor.yml request verbose mode?
@@ -433,14 +397,14 @@ class Builder implements LoggerAwareInterface
         }
 
         if (!empty($this->config['build_settings']['binary_path'])) {
-            $this->binaryPath = rtrim(
+            $this->binaryPath = \rtrim(
                 $this->interpolate($this->config['build_settings']['binary_path']),
                 '/\\'
             ) . '/';
         }
 
         if (!empty($this->config['build_settings']['priority_path']) &&
-            in_array(
+            \in_array(
                 $this->config['build_settings']['priority_path'],
                 Plugin::AVAILABLE_PRIORITY_PATHS,
                 true
@@ -455,75 +419,41 @@ class Builder implements LoggerAwareInterface
             $directory = $this->config['build_settings']['directory'];
         }
 
-        $this->directory = rtrim(
+        $this->directory = \rtrim(
             $this->interpolate($directory),
             '/\\'
         ) . '/';
 
-        $this->buildLogger->logSuccess(sprintf('Working copy created: %s', $this->buildPath));
+        $this->buildLogger->logSuccess(\sprintf('Working copy created: %s', $this->buildPath));
+
+        if (!$workingCopySuccess) {
+            throw new RuntimeException('Could not create a working copy.');
+        }
 
         return true;
     }
 
-    /**
-     * Sets a logger instance on the object
-     *
-     * @param LoggerInterface $logger
-     */
-    public function setLogger(LoggerInterface $logger)
-    {
-        $this->buildLogger->setLogger($logger);
-    }
-
-    /**
-     * Write to the build log.
-     *
-     * @param string $message
-     * @param string $level
-     * @param array  $context
-     */
-    public function log($message, $level = LogLevel::INFO, $context = [])
+    public function log(string $message, string $level = LogLevel::INFO, array $context = []): void
     {
         $this->buildLogger->log($message, $level, $context);
     }
 
-    /**
-     * Add a warning-coloured message to the log.
-     *
-     * @param string $message
-     */
-    public function logWarning($message)
+    public function logWarning(string $message): void
     {
         $this->buildLogger->logWarning($message);
     }
 
-    /**
-     * Add a success-coloured message to the log.
-     *
-     * @param string $message
-     */
-    public function logSuccess($message)
+    public function logSuccess(string $message): void
     {
         $this->buildLogger->logSuccess($message);
     }
 
-    /**
-     * Add a failure-coloured message to the log.
-     *
-     * @param string     $message
-     * @param Exception $exception The exception that caused the error.
-     */
-    public function logFailure($message, Exception $exception = null)
+    public function logFailure(string $message, ?\Throwable $exception = null): void
     {
         $this->buildLogger->logFailure($message, $exception);
     }
 
-    /**
-     * Add a debug-coloured message to the log.
-     *
-     * @param string $message
-     */
-    public function logDebug($message)
+    public function logDebug(string $message): void
     {
         $this->buildLogger->logDebug($message);
     }
@@ -535,52 +465,12 @@ class Builder implements LoggerAwareInterface
      *
      * @return PluginFactory
      */
-    private function buildPluginFactory(Build $build)
+    private function buildPluginFactory(Build $build): PluginFactory
     {
-        $pluginFactory = new PluginFactory();
-
-        $self = $this;
-        $pluginFactory->registerResource(
-            function () use ($self) {
-                return $self;
-            },
-            null,
-            'PHPCensor\Builder'
-        );
-
-        $pluginFactory->registerResource(
-            function () use ($build) {
-                return $build;
-            },
-            null,
-            'PHPCensor\Model\Build'
-        );
-
-        $logger = $this->logger;
-        $pluginFactory->registerResource(
-            function () use ($logger) {
-                return $logger;
-            },
-            null,
-            'Psr\Log\LoggerInterface'
-        );
-
-        $pluginFactory->registerResource(
-            function () use ($self) {
-                $factory = new MailerFactory($self->getSystemConfig('php-censor'));
-                return $factory->getSwiftMailerFromConfig();
-            },
-            null,
-            'Swift_Mailer'
-        );
-
-        return $pluginFactory;
+        return new PluginFactory($this, $build);
     }
 
-    /**
-     * @return BuildErrorWriter
-     */
-    public function getBuildErrorWriter()
+    public function getBuildErrorWriter(): BuildErrorWriter
     {
         return $this->buildErrorWriter;
     }

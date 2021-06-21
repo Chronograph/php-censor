@@ -1,109 +1,71 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor;
 
 use Exception;
-use Monolog\Handler\HandlerInterface;
-use Monolog\Handler\RotatingFileHandler;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Exception\HttpException\NotFoundException;
-use Symfony\Component\HttpFoundation\Request;
+use PHPCensor\Http\Request;
 use PHPCensor\Http\Response;
 use PHPCensor\Http\Response\RedirectResponse;
 use PHPCensor\Http\Router;
-use PHPCensor\Logging\Handler;
-use PHPCensor\Store\Factory;
+use PHPCensor\Model\User;
+use PHPCensor\Store\UserStore;
 
 /**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class Application
 {
-    /**
-     * @var array
-     */
-    protected $route;
+    private ?array $route;
 
-    /**
-     * @var Controller|WebController
-     */
-    protected $controller;
+    private Controller $controller;
 
-    /**
-     * @var Request
-     */
-    protected $request;
+    private Request $request;
 
-    /**
-     * @var Config
-     */
-    protected $config;
+    private ConfigurationInterface $configuration;
 
-    /**
-     * @var Router
-     */
-    protected $router;
+    private StoreRegistry $storeRegistry;
 
-    /**
-     * @var Logger
-     */
-    protected $logger;
+    private Router $router;
 
-    /**
-     * @param Config $applicationConfig
-     *
-     * @param Request|null $request
-     */
-    public function __construct(Config $applicationConfig, Request $request = null)
-    {
-        $this->config = $applicationConfig;
+    public function __construct(
+        ConfigurationInterface $configuration,
+        StoreRegistry $storeRegistry,
+        ?Request $request = null
+    ) {
+        $this->configuration   = $configuration;
+        $this->storeRegistry   = $storeRegistry;
 
-        if (null === $request) {
-            $request = Request::createFromGlobals();
+        $this->request = new Request();
+        if (!\is_null($request)) {
+            $this->request = $request;
         }
 
-        $this->request = $request;
-        if (!\defined('APP_URL')) {
-            \define('APP_URL', $this->request->getSchemeAndHttpHost() . '/');
-        }
+        $this->router = new Router($this, $this->request);
 
-        $this->router  = new Router($this, $this->request, $this->config);
-
-        $this->initLogger();
         $this->init();
-    }
-
-    protected function initLogger()
-    {
-        $rotate   = (bool)$this->config->get('php-censor.log.rotate', false);
-        $maxFiles = (int)$this->config->get('php-censor.log.max_files', 0);
-
-        /** @var HandlerInterface[] $loggerHandlers */
-        $loggerHandlers = [];
-        if ($rotate) {
-            $loggerHandlers[] = new RotatingFileHandler(RUNTIME_DIR . 'web.log', $maxFiles, Logger::DEBUG);
-        } else {
-            $loggerHandlers[] = new StreamHandler(RUNTIME_DIR . 'web.log', Logger::DEBUG);
-        }
-
-        $this->logger = new Logger('php-censor', $loggerHandlers);
-        Handler::register($this->logger);
     }
 
     /**
      * Initialise Application - Handles session verification, routing, etc.
      */
-    public function init()
+    public function init(): void
     {
+        $request =& $this->request;
         $route   = '/:controller/:action';
         $opts    = ['controller' => 'Home', 'action' => 'index'];
 
         // Inlined as a closure to fix "using $this when not in object context" on 5.3
         $validateSession = function () {
             if (!empty($_SESSION['php-censor-user-id'])) {
-                $user = Factory::getStore('User')->getByPrimaryKey($_SESSION['php-censor-user-id']);
+                $user = $this->storeRegistry->get('User')->getByPrimaryKey($_SESSION['php-censor-user-id']);
 
                 if ($user) {
                     return true;
@@ -114,17 +76,17 @@ class Application
         };
 
         $skipAuth = [$this, 'shouldSkipAuth'];
-        $isAjaxRequest = $this->request->isXmlHttpRequest();
 
         // Handler for the route we're about to register, checks for a valid session where necessary:
-        $routeHandler = function ($route, Response &$response) use ($isAjaxRequest, $validateSession, $skipAuth) {
+        $routeHandler = function ($route, Response &$response) use (&$request, $validateSession, $skipAuth) {
             $skipValidation = in_array($route['controller'], ['session', 'webhook', 'build-status']);
 
             if (!$skipValidation && !$validateSession() && (!is_callable($skipAuth) || !$skipAuth())) {
-                if ($isAjaxRequest) {
+                if ($request->isAjax()) {
                     $response->setResponseCode(401);
                     $response->setContent('');
                 } else {
+                    $_SESSION['php-censor-login-redirect'] = substr($request->getPath(), 1);
                     $response = new RedirectResponse($response);
                     $response->setHeader('Location', APP_URL . 'session/login');
                 }
@@ -144,7 +106,7 @@ class Application
      *
      * @throws NotFoundException
      */
-    protected function handleRequestInner()
+    protected function handleRequestInner(): Response
     {
         $this->route = $this->router->dispatch();
 
@@ -170,27 +132,45 @@ class Application
     }
 
     /**
+     * @return User|null
+     *
+     * @throws Common\Exception\RuntimeException
+     * @throws HttpException
+     */
+    private function getUser(): ?User
+    {
+        if (empty($_SESSION['php-censor-user-id'])) {
+            return null;
+        }
+
+        /** @var UserStore $userStore */
+        $userStore = $this->storeRegistry->get('User');
+
+        return $userStore->getById($_SESSION['php-censor-user-id']);
+    }
+
+    /**
      * Handle an incoming web request.
      *
      * @return Response
+     *
+     * @throws Common\Exception\RuntimeException
+     * @throws HttpException
      */
-    public function handleRequest()
+    public function handleRequest(): Response
     {
         try {
             $response = $this->handleRequestInner();
         } catch (HttpException $ex) {
-            $this->config->set('page_title', 'Error');
-
             $view = new View('exception');
             $view->exception = $ex;
+            $view->user      = $this->getUser();
 
             $response = new Response();
 
             $response->setResponseCode($ex->getErrorCode());
             $response->setContent($view->render());
         } catch (Exception $ex) {
-            $this->config->set('page_title', 'Error');
-
             $view = new View('exception');
             $view->exception = $ex;
 
@@ -210,10 +190,10 @@ class Application
      *
      * @return Controller
      */
-    protected function loadController($class)
+    protected function loadController(string $class): Controller
     {
         /** @var Controller $controller */
-        $controller = new $class($this->config, $this->request);
+        $controller = new $class($this->configuration, $this->storeRegistry, $this->request);
 
         $controller->init();
 
@@ -224,15 +204,16 @@ class Application
      * Check whether we should skip auth (because it is disabled)
      *
      * @return bool
+     *
+     * @throws Common\Exception\RuntimeException
      */
-    protected function shouldSkipAuth()
+    protected function shouldSkipAuth(): bool
     {
-        $config        = Config::getInstance();
-        $disableAuth   = (bool)$config->get('php-censor.security.disable_auth', false);
-        $defaultUserId = (int)$config->get('php-censor.security.default_user_id', 1);
+        $disableAuth   = (bool)$this->configuration->get('php-censor.security.disable_auth', false);
+        $defaultUserId = (int)$this->configuration->get('php-censor.security.default_user_id', 1);
 
         if ($disableAuth && $defaultUserId) {
-            $user = Factory::getStore('User')->getByPrimaryKey($defaultUserId);
+            $user = $this->storeRegistry->get('User')->getByPrimaryKey($defaultUserId);
 
             if ($user) {
                 return true;
@@ -242,10 +223,7 @@ class Application
         return false;
     }
 
-    /**
-     * @return Controller
-     */
-    public function getController()
+    public function getController(): Controller
     {
         if (empty($this->controller)) {
             $controllerClass  = $this->getControllerClass($this->route);
@@ -255,22 +233,12 @@ class Application
         return $this->controller;
     }
 
-    /**
-     * @param array $route
-     *
-     * @return bool
-     */
-    protected function controllerExists($route)
+    protected function controllerExists(array $route): bool
     {
-        return class_exists($this->getControllerClass($route));
+        return \class_exists($this->getControllerClass($route));
     }
 
-    /**
-     * @param array $route
-     *
-     * @return string
-     */
-    protected function getControllerClass($route)
+    protected function getControllerClass(array $route): string
     {
         $namespace  = $this->toPhpName($route['namespace']);
         $controller = $this->toPhpName($route['controller']);
@@ -278,12 +246,7 @@ class Application
         return 'PHPCensor\\' . $namespace . '\\' . $controller . 'Controller';
     }
 
-    /**
-     * @param array $route
-     *
-     * @return bool
-     */
-    public function isValidRoute(array $route)
+    public function isValidRoute(array $route): bool
     {
         if ($this->controllerExists($route)) {
             return true;
@@ -292,17 +255,11 @@ class Application
         return false;
     }
 
-    /**
-     * @param string $string
-     *
-     * @return string
-     */
-    protected function toPhpName($string)
+    protected function toPhpName(string $string): string
     {
-        $string = str_replace('-', ' ', $string);
-        $string = ucwords($string);
-        $string = str_replace(' ', '', $string);
+        $string = \str_replace('-', ' ', $string);
+        $string = \ucwords($string);
 
-        return $string;
+        return \str_replace(' ', '', $string);
     }
 }

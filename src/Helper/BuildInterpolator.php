@@ -5,7 +5,7 @@ namespace PHPCensor\Helper;
 use Exception;
 use PHPCensor\Model\Build as BaseBuild;
 use PHPCensor\Store\EnvironmentStore;
-use PHPCensor\Store\Factory;
+use PHPCensor\StoreRegistry;
 
 /**
  * The BuildInterpolator class replaces variables in a string with build-specific information.
@@ -20,17 +20,25 @@ class BuildInterpolator
      *
      * @see setupInterpolationVars()
      */
-    protected $interpolationVars = [];
+    private array $interpolationVars = [];
+
+    private StoreRegistry $storeRegistry;
+
+    public function __construct(StoreRegistry $storeRegistry)
+    {
+        $this->storeRegistry = $storeRegistry;
+    }
 
     /**
      * Sets the variables that will be used for interpolation.
      *
      * @param BaseBuild $build
-     * @param           $url
+     * @param string    $url
+     * @param string    $applicationVersion
      *
      * @throws Exception
      */
-    public function setupInterpolationVars(BaseBuild $build, $url)
+    public function setupInterpolationVars(BaseBuild $build, $url, $applicationVersion)
     {
         $this->interpolationVars = [];
 
@@ -52,14 +60,15 @@ class BuildInterpolator
         $environment   = null;
         if ($environmentId) {
             /** @var EnvironmentStore $environmentStore */
-            $environmentStore  = Factory::getStore('Environment');
+            $environmentStore  = $this->storeRegistry->get('Environment');
             $environmentObject = $environmentStore->getById($environmentId);
             if ($environmentObject) {
                 $environment = $environmentObject->getName();
             }
         }
 
-        $this->interpolationVars['%ENVIRONMENT%'] = $environment;
+        $this->interpolationVars['%ENVIRONMENT%']    = $environment;
+        $this->interpolationVars['%SYSTEM_VERSION%'] = $applicationVersion;
 
         putenv('PHP_CENSOR=1');
         putenv('PHP_CENSOR_COMMIT_ID=' . $this->interpolationVars['%COMMIT_ID%']);
@@ -76,6 +85,7 @@ class BuildInterpolator
         putenv('PHP_CENSOR_BRANCH=' . $this->interpolationVars['%BRANCH%']);
         putenv('PHP_CENSOR_BRANCH_LINK=' . $this->interpolationVars['%BRANCH_LINK%']);
         putenv('PHP_CENSOR_ENVIRONMENT=' . $this->interpolationVars['%ENVIRONMENT%']);
+        putenv('PHP_CENSOR_SYSTEM_VERSION=' . $this->interpolationVars['%SYSTEM_VERSION%']);
     }
 
     /**
@@ -87,9 +97,8 @@ class BuildInterpolator
     {
         $input = str_replace('%CURRENT_DATE%', \date('Y-m-d'), $input);
         $input = str_replace('%CURRENT_TIME%', \date('H-i-s'), $input);
-        $input = str_replace('%CURRENT_DATETIME%', \date('Y-m-d_H-i-s'), $input);
 
-        return $input;
+        return str_replace('%CURRENT_DATETIME%', \date('Y-m-d_H-i-s'), $input);
     }
 
     /**

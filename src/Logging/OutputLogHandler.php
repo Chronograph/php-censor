@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Logging;
 
 use Monolog\Handler\AbstractProcessingHandler;
@@ -8,23 +10,25 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Class OutputLogHandler outputs the build log to the terminal.
+ *
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class OutputLogHandler extends AbstractProcessingHandler
 {
-    /**
-     * @var OutputInterface
-     */
-    protected $output;
+    protected OutputInterface $output;
 
     /**
      * @param OutputInterface $output
-     * @param bool|string $level
-     * @param bool $bubble
+     * @param string          $level
+     * @param bool            $bubble
      */
     public function __construct(
         OutputInterface $output,
-        $level = LogLevel::INFO,
-        $bubble = true
+        string $level = LogLevel::INFO,
+        bool $bubble = true
     ) {
         parent::__construct($level, $bubble);
 
@@ -33,9 +37,10 @@ class OutputLogHandler extends AbstractProcessingHandler
 
     /**
      * Write a log entry to the terminal.
+     *
      * @param array $record
      */
-    protected function write(array $record)
+    protected function write(array $record): void
     {
         $this->output->write((string)$record['formatted']);
     }

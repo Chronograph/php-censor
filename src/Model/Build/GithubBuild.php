@@ -5,7 +5,6 @@ namespace PHPCensor\Model\Build;
 use Exception;
 use GuzzleHttp\Client;
 use PHPCensor\Builder;
-use PHPCensor\Config;
 use PHPCensor\Helper\Diff;
 use PHPCensor\Helper\Github;
 use PHPCensor\Model\Build;
@@ -100,12 +99,12 @@ class GithubBuild extends GitBuild
             return false;
         }
 
-        $token = Config::getInstance()->get('php-censor.github.token');
+        $token = $this->configuration->get('php-censor.github.token');
         if (empty($token) || empty($this->data['id'])) {
             return false;
         }
 
-        $allowStatusCommit = (bool)Config::getInstance()->get(
+        $allowStatusCommit = (bool)$this->configuration->get(
             'php-censor.github.status.commit',
             false
         );
@@ -134,7 +133,7 @@ class GithubBuild extends GitBuild
                 break;
         }
 
-        $phpCensorUrl = Config::getInstance()->get('php-censor.url');
+        $phpCensorUrl = $this->configuration->get('php-censor.url');
 
         $url    = '/repos/' . $project->getReference() . '/statuses/' . $this->getCommitId();
         $client = new Client([
@@ -271,41 +270,45 @@ class GithubBuild extends GitBuild
         $lineStart = null,
         $lineEnd = null
     ) {
-        $allowCommentCommit = (bool)Config::getInstance()->get(
-            'php-censor.github.comments.commit',
-            false
-        );
+        parent::reportError($builder, $plugin, $message, $severity, $file, $lineStart, $lineEnd);
 
-        $allowCommentPullRequest = (bool)Config::getInstance()->get(
-            'php-censor.github.comments.pull_request',
-            false
-        );
+        try {
+            $allowCommentCommit = (bool)$this->configuration->get(
+                'php-censor.github.comments.commit',
+                false
+            );
 
-        if ($allowCommentCommit || $allowCommentPullRequest) {
-            if ($file) {
-                $diffLineNumber = $this->getDiffLineNumber($builder, $file, $lineStart);
+            $allowCommentPullRequest = (bool)$this->configuration->get(
+                'php-censor.github.comments.pull_request',
+                false
+            );
 
-                if (!is_null($diffLineNumber)) {
-                    $helper = new Github();
+            if ($allowCommentCommit || $allowCommentPullRequest) {
+                if ($file) {
+                    $diffLineNumber = $this->getDiffLineNumber($builder, $file, $lineStart);
 
-                    $repo     = $this->getProject()->getReference();
-                    $prNumber = $this->getExtra('pull_request_number');
-                    $commit   = $this->getCommitId();
+                    if (!is_null($diffLineNumber)) {
+                        $helper = new Github($this->configuration);
 
-                    if (!empty($prNumber)) {
-                        if ($allowCommentPullRequest) {
-                            $helper->createPullRequestComment($repo, $prNumber, $commit, $file, $diffLineNumber, $message);
-                        }
-                    } else {
-                        if ($allowCommentCommit) {
-                            $helper->createCommitComment($repo, $commit, $file, $diffLineNumber, $message);
+                        $repo     = $this->getProject()->getReference();
+                        $prNumber = $this->getExtra('pull_request_number');
+                        $commit   = $this->getCommitId();
+
+                        if (!empty($prNumber)) {
+                            if ($allowCommentPullRequest) {
+                                $helper->createPullRequestComment($repo, $prNumber, $commit, $file, $diffLineNumber, $message);
+                            }
+                        } else {
+                            if ($allowCommentCommit) {
+                                $helper->createCommitComment($repo, $commit, $file, $diffLineNumber, $message);
+                            }
                         }
                     }
                 }
             }
+        } catch (\Throwable $e) {
+            $builder->getBuildLogger()->logFailure('Exception: ' . $e->getMessage(), $e);
         }
-
-        parent::reportError($builder, $plugin, $message, $severity, $file, $lineStart, $lineEnd);
     }
 
     /**

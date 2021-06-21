@@ -5,28 +5,27 @@ namespace PHPCensor\Controller;
 use PHPCensor\BuildFactory;
 use PHPCensor\Http\Response;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
 use PHPCensor\View;
 use PHPCensor\WebController;
 
 /**
- * Widget Last Builds Controller
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class WidgetLastBuildsController extends WebController
 {
-    /**
-     * @var BuildStore
-     */
-    protected $buildStore;
+    protected BuildStore $buildStore;
 
     /**
      * Initialise the controller, set up stores and services.
      */
-    public function init()
+    public function init(): void
     {
         parent::init();
 
-        $this->buildStore = Factory::getStore('Build');
+        $this->buildStore = $this->storeRegistry->get('Build');
     }
 
     /**
@@ -37,7 +36,7 @@ class WidgetLastBuildsController extends WebController
         $builds = $this->buildStore->getLatestBuilds(null, 10);
 
         foreach ($builds as &$build) {
-            $build = BuildFactory::getBuild($build);
+            $build = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
         }
 
         $view = new View('WidgetLastBuilds/update');
@@ -59,10 +58,11 @@ class WidgetLastBuildsController extends WebController
         $builds = $this->buildStore->getLatestBuilds(null, 10);
 
         foreach ($builds as &$build) {
-            $build = BuildFactory::getBuild($build);
+            $build = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
         }
 
-        $this->view->builds = $builds;
+        $this->view->builds           = $builds;
+        $this->view->environmentStore = $this->storeRegistry->get('Environment');
 
         $response = new Response();
         $response->setContent($this->view->render());

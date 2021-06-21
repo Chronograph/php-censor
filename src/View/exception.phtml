@@ -3,11 +3,9 @@
 use PHPCensor\Model\User;
 
 /**
- * @var $exception Exception
+ * @var Exception $exception
+ * @var User      $user
  */
-
-/** @var User $user */
-$user = $this->getUser();
 
 ?>
 <div class="panel panel-danger">
@@ -15,7 +13,7 @@ $user = $this->getUser();
         <h2 class="box-title">Sorry, there was a problem</h2>
     </div>
 
-
+    <?php if ($user && $user->getIsAdmin()): ?>
         <div class="box-body">
             <strong>Message</strong>: <?= $exception->getMessage(); ?><br />
             <strong>File</strong>: <?= $exception->getFile(); ?><br />
@@ -23,5 +21,5 @@ $user = $this->getUser();
             <strong>Trace</strong>:
             <pre style="white-space: pre-wrap"><?= $exception->getTraceAsString(); ?></pre>
         </div>
-
+    <?php endif; ?>
 </div>

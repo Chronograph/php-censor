@@ -1,30 +1,28 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Store;
 
 use Exception;
 use PDO;
-use PHPCensor\Database;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Model\Environment;
 use PHPCensor\Store;
 
+/**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
+ */
 class EnvironmentStore extends Store
 {
-    /**
-     * @var string
-     */
-    protected $tableName = 'environments';
+    protected string $tableName = 'environments';
 
-    /**
-     * @var string
-     */
-    protected $modelName = '\PHPCensor\Model\Environment';
+    protected ?string $modelName = '\PHPCensor\Model\Environment';
 
-    /**
-     * @var string
-     */
-    protected $primaryKey = 'id';
+    protected ?string $primaryKey = 'id';
 
     /**
      * Get a Environment by primary key (Id)
@@ -34,7 +32,7 @@ class EnvironmentStore extends Store
      *
      * @return null|Environment
      */
-    public function getByPrimaryKey($key, $useConnection = 'read')
+    public function getByPrimaryKey($key, string $useConnection = 'read'): ?Environment
     {
         return $this->getById($key, $useConnection);
     }
@@ -56,12 +54,12 @@ class EnvironmentStore extends Store
         }
 
         $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{id}} = :id LIMIT 1';
-        $stmt = Database::getConnection($useConnection)->prepareCommon($query);
+        $stmt  = $this->databaseManager->getConnection($useConnection)->prepare($query);
         $stmt->bindValue(':id', $id);
 
         if ($stmt->execute()) {
             if ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                return new Environment($data);
+                return new Environment($this->storeRegistry, $data);
             }
         }
 
@@ -72,25 +70,27 @@ class EnvironmentStore extends Store
      * Get a single Environment by Name.
      *
      * @param string $name
+     * @param int    $projectId
      * @param string $useConnection
      *
      * @return null|Environment
      *
      * @throws HttpException
      */
-    public function getByName($name, $useConnection = 'read')
+    public function getByNameAndProjectId($name, $projectId, $useConnection = 'read')
     {
         if (is_null($name)) {
             throw new HttpException('Value passed to ' . __FUNCTION__ . ' cannot be null.');
         }
 
-        $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{name}} = :name LIMIT 1';
-        $stmt = Database::getConnection($useConnection)->prepareCommon($query);
+        $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{name}} = :name AND {{project_id}} = :project_id LIMIT 1';
+        $stmt  = $this->databaseManager->getConnection($useConnection)->prepare($query);
         $stmt->bindValue(':name', $name);
+        $stmt->bindValue(':project_id', $projectId);
 
         if ($stmt->execute()) {
             if ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                return new Environment($data);
+                return new Environment($this->storeRegistry, $data);
             }
         }
 
@@ -110,11 +110,11 @@ class EnvironmentStore extends Store
     public function getByProjectId($projectId, $useConnection = 'read')
     {
         if (is_null($projectId)) {
-            throw new Exception('Value passed to ' . __FUNCTION__ . ' cannot be null.');
+            throw new HttpException('Value passed to ' . __FUNCTION__ . ' cannot be null.');
         }
 
         $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{project_id}} = :project_id';
-        $stmt  = Database::getConnection($useConnection)->prepareCommon($query);
+        $stmt  = $this->databaseManager->getConnection($useConnection)->prepare($query);
 
         $stmt->bindValue(':project_id', $projectId);
 
@@ -122,7 +122,7 @@ class EnvironmentStore extends Store
             $res = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $map = function ($item) {
-                return new Environment($item);
+                return new Environment($this->storeRegistry, $item);
             };
             $rtn = array_map($map, $res);
 

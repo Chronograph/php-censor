@@ -1,72 +1,72 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor;
 
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Exception\HttpException\ForbiddenException;
-use Symfony\Component\HttpFoundation\Request;
+use PHPCensor\Http\Request;
 use PHPCensor\Http\Response;
 use PHPCensor\Model\User;
-use PHPCensor\Store\Factory;
 use PHPCensor\Store\UserStore;
 
+/**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
+ */
 abstract class WebController extends Controller
 {
-    /**
-     * @var string
-     */
-    protected $className;
+    protected string $className;
 
-    /**
-     * @var View
-     */
-    protected $view = null;
+    protected ?View $view = null;
 
-    /**
-     * @var string
-     */
-    public $layoutName = '';
+    public string $layoutName = '';
 
-    /**
-     * @var View
-     */
-    public $layout = null;
+    public ?View $layout = null;
 
-    /**
-     * @param Config  $config
-     * @param Request $request
-     */
-    public function __construct(Config $config, Request $request)
-    {
-        parent::__construct($config, $request);
+    public function __construct(
+        ConfigurationInterface $configuration,
+        StoreRegistry $storeRegistry,
+        Request $request
+    ) {
+        parent::__construct($configuration, $storeRegistry, $request);
 
-        $class           = explode('\\', get_class($this));
-        $this->className = substr(array_pop($class), 0, -10);
+        $class           = \explode('\\', \get_class($this));
+        $this->className = \substr(\array_pop($class), 0, -10);
     }
 
-    public function init()
+    public function init(): void
     {
         if (!empty($this->layoutName)) {
             $this->layout = new View($this->layoutName);
 
             $this->layout->title      = 'PHP Censor';
             $this->layout->breadcrumb = [];
-            $this->layout->version    = trim(file_get_contents(ROOT_DIR . 'VERSION.md'));
 
-            $groups = [];
-            $groupStore = Factory::getStore('ProjectGroup');
-            $groupList = $groupStore->getWhere([], 100, 0, ['title' => 'ASC']);
+            $version = (string)\trim(\file_get_contents(ROOT_DIR . 'VERSION.md'));
+            $version = !empty($version) ? $version : '0.0.0 (UNKNOWN)';
+
+            $this->layout->version         = $version;
+            $this->layout->isLoginDisabled = (bool)$this->configuration->get('php-censor.security.disable_auth', false);
+
+            $groups     = [];
+            $groupStore = $this->storeRegistry->get('ProjectGroup');
+            $groupList  = $groupStore->getWhere([], 100, 0, ['title' => 'ASC']);
 
             foreach ($groupList['items'] as $group) {
                 $thisGroup             = ['title' => $group->getTitle()];
-                $projects              = Factory::getStore('Project')->getByGroupId($group->getId(), false);
+                $projects              = $this->storeRegistry->get('Project')->getByGroupId($group->getId(), false);
                 $thisGroup['projects'] = $projects['items'];
                 $groups[]              = $thisGroup;
             }
 
-            $archivedProjects               = Factory::getStore('Project')->getAll(true);
+            $archivedProjects               = $this->storeRegistry->get('Project')->getAll(true);
             $this->layout->archivedProjects = $archivedProjects['items'];
             $this->layout->groups           = $groups;
+            $this->layout->user             = $this->getUser();
         }
     }
 
@@ -77,8 +77,10 @@ abstract class WebController extends Controller
      * @param array  $actionParams
      *
      * @return Response
+     *
+     * @throws Common\Exception\RuntimeException
      */
-    public function handleAction($action, $actionParams)
+    public function handleAction(string $action, array $actionParams): Response
     {
         if (View::exists($this->className . '/' . $action)) {
             $this->view = new View($this->className . '/' . $action);
@@ -114,7 +116,7 @@ abstract class WebController extends Controller
      *
      * @throws HttpException
      */
-    protected function requireAdmin()
+    protected function requireAdmin(): void
     {
         if (!$this->currentUserIsAdmin()) {
             throw new ForbiddenException('You do not have permission to do that.');
@@ -126,11 +128,9 @@ abstract class WebController extends Controller
      *
      * @return bool
      *
-     * @return bool
-     *
      * @throws HttpException
      */
-    protected function currentUserIsAdmin()
+    protected function currentUserIsAdmin(): bool
     {
         $user = $this->getUser();
         if (!$user) {
@@ -143,16 +143,17 @@ abstract class WebController extends Controller
     /**
      * @return User|null
      *
+     * @throws Common\Exception\RuntimeException
      * @throws HttpException
      */
-    protected function getUser()
+    protected function getUser(): ?User
     {
         if (empty($_SESSION['php-censor-user-id'])) {
             return null;
         }
 
         /** @var UserStore $userStore */
-        $userStore = Factory::getStore('User');
+        $userStore = $this->storeRegistry->get('User');
 
         return $userStore->getById($_SESSION['php-censor-user-id']);
     }

@@ -1,49 +1,48 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor;
 
-use Symfony\Component\HttpFoundation\Request;
+use PHPCensor\Http\Request;
 use PHPCensor\Http\Response;
 
+/**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
+ */
 abstract class Controller
 {
-    /**
-     * @var Request
-     */
-    protected $request;
+    protected Request $request;
 
-    /**
-     * @var Config
-     */
-    protected $config;
+    protected ConfigurationInterface $configuration;
 
-    /**
-     * @param Config  $config
-     * @param Request $request
-     */
-    public function __construct(Config $config, Request $request)
-    {
-        $this->config   = $config;
-        $this->request  = $request;
+    protected StoreRegistry $storeRegistry;
+
+    public function __construct(
+        ConfigurationInterface $configuration,
+        StoreRegistry $storeRegistry,
+        Request $request
+    ) {
+        $this->configuration = $configuration;
+        $this->storeRegistry = $storeRegistry;
+        $this->request       = $request;
     }
 
     /**
      * Initialise the controller.
      */
-    abstract public function init();
+    abstract public function init(): void;
 
-    /**
-     * @param string $name
-     *
-     * @return bool
-     */
-    public function hasAction($name)
+    public function hasAction(string $name): bool
     {
-        if (method_exists($this, $name)) {
+        if (\method_exists($this, $name)) {
             return true;
         }
 
-        if (method_exists($this, '__call')) {
+        if (\method_exists($this, '__call')) {
             return true;
         }
 
@@ -58,9 +57,9 @@ abstract class Controller
      *
      * @return Response
      */
-    public function handleAction($action, $actionParams)
+    public function handleAction(string $action, array $actionParams): Response
     {
-        return call_user_func_array([$this, $action], $actionParams);
+        return \call_user_func_array([$this, $action], $actionParams);
     }
 
     /**
@@ -68,9 +67,9 @@ abstract class Controller
      *
      * @return array
      */
-    public function getParams()
+    public function getParams(): array
     {
-        return $this->request->request->all() + $this->request->query->all();
+        return $this->request->getParams();
     }
 
     /**
@@ -81,8 +80,29 @@ abstract class Controller
      *
      * @return mixed
      */
-    public function getParam($key, $default = null)
+    public function getParam(string $key, $default = null)
     {
-        return $this->request->get($key, $default);
+        return $this->request->getParam($key, $default);
+    }
+
+    /**
+     * Change the value of an incoming request parameter.
+     *
+     * @param string $key
+     * @param mixed  $value
+     */
+    public function setParam(string $key, $value)
+    {
+        $this->request->setParam($key, $value);
+    }
+
+    /**
+     * Remove an incoming request parameter.
+     *
+     * @param string $key
+     */
+    public function unsetParam(string $key): void
+    {
+        $this->request->unsetParam($key);
     }
 }

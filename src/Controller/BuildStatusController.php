@@ -6,39 +6,31 @@ use Exception;
 use PHPCensor\BuildFactory;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Exception\HttpException\NotFoundException;
-use PHPCensor\Exception\InvalidArgumentException;
+use PHPCensor\Common\Exception\InvalidArgumentException;
 use PHPCensor\Http\Response;
 use PHPCensor\Http\Response\RedirectResponse;
 use PHPCensor\Model\Build;
 use PHPCensor\Model\Project;
 use PHPCensor\Service\BuildStatusService;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
 use PHPCensor\Store\ProjectStore;
 use PHPCensor\WebController;
 use SimpleXMLElement;
 
 /**
- * Build Status Controller - Allows external access to build status information / images.
+ * @package    PHP Censor
+ * @subpackage Application
  *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class BuildStatusController extends WebController
 {
-    /**
-     * @var string
-     */
-    public $layoutName = 'layoutPublic';
+    public string $layoutName = 'layoutPublic';
 
-    /**
-     * @var ProjectStore
-     */
-    protected $projectStore;
+    protected ProjectStore $projectStore;
 
-    /**
-     * @var BuildStore
-     */
-    protected $buildStore;
+    protected BuildStore $buildStore;
 
     /**
      * Returns status of the last build
@@ -142,18 +134,18 @@ class BuildStatusController extends WebController
         $builds = $this->buildStore->getWhere($criteria, 10, 0, $order);
 
         foreach ($builds['items'] as &$build) {
-            $build = BuildFactory::getBuild($build);
+            $build = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
         }
 
         return $builds['items'];
     }
 
-    public function init()
+    public function init(): void
     {
         parent::init();
 
-        $this->buildStore   = Factory::getStore('Build');
-        $this->projectStore = Factory::getStore('Project');
+        $this->buildStore   = $this->storeRegistry->get('Build');
+        $this->projectStore = $this->storeRegistry->get('Project');
     }
 
     /**
@@ -302,8 +294,9 @@ class BuildStatusController extends WebController
             $this->view->latest = $builds[0];
         }
 
-        $this->view->builds  = $builds;
-        $this->view->project = $project;
+        $this->view->builds           = $builds;
+        $this->view->project          = $project;
+        $this->view->environmentStore = $this->storeRegistry->get('Environment');
 
         return $this->view->render();
     }

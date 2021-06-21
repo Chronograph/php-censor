@@ -1,109 +1,103 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Worker;
 
 use DateTime;
 use Exception;
 use Monolog\Logger;
-use Pheanstalk\Exception\ServerException;
 use Pheanstalk\Job;
 use Pheanstalk\Pheanstalk;
 use PHPCensor\Builder;
 use PHPCensor\BuildFactory;
+use PHPCensor\ConfigurationInterface;
+use PHPCensor\DatabaseManager;
 use PHPCensor\Logging\BuildDBLogHandler;
 use PHPCensor\Model\Build;
 use PHPCensor\Service\BuildService;
-use PHPCensor\Store\Factory;
+use PHPCensor\Store\BuildStore;
+use PHPCensor\StoreRegistry;
 
+/**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
+ */
 class BuildWorker
 {
-    const JOB_TYPE_BUILD     = 'php-censor.build';
-    const JOB_TYPE_STOP_FLAG = 'php-censor.stop-flag';
+    public const JOB_TYPE_BUILD     = 'php-censor.build';
+    public const JOB_TYPE_STOP_FLAG = 'php-censor.stop-flag';
 
     /**
      * If this variable changes to false, the worker will stop after the current build.
-     *
-     * @var bool
      */
-    protected $canRun = true;
+    private bool $canRun = true;
 
-    /**
-     * @var bool
-     */
-    protected $canPeriodicalWork;
+    private bool $canPeriodicalWork;
 
     /**
      * The logger for builds to use.
-     *
-     * @var Logger
      */
-    protected $logger;
+    private Logger $logger;
 
-    /**
-     * @var BuildService
-     */
-    protected $buildService;
+    private BuildService $buildService;
+
+    private ConfigurationInterface $configuration;
+
+    private DatabaseManager $databaseManager;
+
+    private StoreRegistry $storeRegistry;
 
     /**
      * beanstalkd queue to watch
-     *
-     * @var string
      */
-    protected $queueTube;
+    private string $queueTube;
 
-    /**
-     * @var Pheanstalk
-     */
-    protected $pheanstalk;
+    private Pheanstalk $pheanstalk;
 
-    /**
-     * @var int
-     */
-    protected $lastPeriodical;
+    private int $lastPeriodical;
 
-    /**
-     * @param Logger       $logger
-     * @param BuildService $buildService,
-     * @param string       $queueHost
-     * @param int          $queuePort
-     * @param string       $queueTube
-     * @param bool         $canPeriodicalWork
-     */
     public function __construct(
+        ConfigurationInterface $configuration,
+        DatabaseManager $databaseManager,
+        StoreRegistry $storeRegistry,
         Logger $logger,
         BuildService $buildService,
-        $queueHost,
-        $queuePort,
-        $queueTube,
-        $canPeriodicalWork
+        string $queueHost,
+        int $queuePort,
+        string $queueTube,
+        bool $canPeriodicalWork
     ) {
-        $this->logger       = $logger;
-        $this->buildService = $buildService;
+        $this->logger          = $logger;
+        $this->buildService    = $buildService;
+        $this->configuration   = $configuration;
+        $this->databaseManager = $databaseManager;
+        $this->storeRegistry   = $storeRegistry;
 
         $this->queueTube  = $queueTube;
-        $this->pheanstalk = new Pheanstalk($queueHost, $queuePort);
+        $this->pheanstalk = Pheanstalk::create($queueHost, $queuePort);
 
         $this->lastPeriodical    = 0;
         $this->canPeriodicalWork = $canPeriodicalWork;
     }
 
-    public function stopWorker()
+    public function stopWorker(): void
     {
         $this->canRun = false;
     }
 
-    public function startWorker()
+    public function startWorker(): void
     {
         $this->canRun = true;
 
         $this->runWorker();
     }
 
-    protected function runWorker()
+    protected function runWorker(): void
     {
         $this->pheanstalk->watchOnly($this->queueTube);
-
-        $buildStore = Factory::getStore('Build');
 
         while ($this->canRun) {
             if ($this->canPeriodicalWork &&
@@ -112,13 +106,13 @@ class BuildWorker
             }
 
             if ($this->canForceRewindLoop()) {
-                sleep(1);
+                \sleep(1);
 
                 continue;
             }
 
             $job     = $this->pheanstalk->reserve();
-            $jobData = json_decode($job->getData(), true);
+            $jobData = \json_decode($job->getData(), true);
 
             if (!$this->verifyJob($job)) {
                 $this->deleteJob($job);
@@ -127,18 +121,22 @@ class BuildWorker
             }
 
             $this->logger->notice(
-                sprintf(
+                \sprintf(
                     'Received build #%s from the queue tube "%s".',
                     $jobData['build_id'],
                     $this->queueTube
                 )
             );
 
-            $build = BuildFactory::getBuildById($jobData['build_id']);
+            $build = BuildFactory::getBuildById(
+                $this->configuration,
+                $this->storeRegistry,
+                (int)$jobData['build_id']
+            );
 
             if (!$build) {
                 $this->logger->warning(
-                    sprintf(
+                    \sprintf(
                         'Build #%s from the queue tube "%s" does not exist in the database!',
                         $jobData['build_id'],
                         $this->queueTube
@@ -152,7 +150,7 @@ class BuildWorker
 
             if (Build::STATUS_PENDING !== $build->getStatus()) {
                 $this->logger->warning(
-                    sprintf(
+                    \sprintf(
                         'Invalid build #%s status "%s" from the queue tube "%s". ' .
                         'Build status should be "%s" (pending)!',
                         $build->getId(),
@@ -167,18 +165,27 @@ class BuildWorker
                 continue;
             }
 
+            /** @var BuildStore $buildStore */
+            $buildStore = $this->storeRegistry->get('Build');
+
             // Logging relevant to this build should be stored against the build itself.
-            $buildDbLog = new BuildDBLogHandler($build, Logger::DEBUG);
+            $buildDbLog = new BuildDBLogHandler($buildStore, $build, Logger::DEBUG);
             $this->logger->pushHandler($buildDbLog);
 
-            $builder = new Builder($build, $this->logger);
+            $builder = new Builder(
+                $this->configuration,
+                $this->databaseManager,
+                $this->storeRegistry,
+                $build,
+                $this->logger
+            );
 
             try {
                 $builder->execute();
             } catch (Exception $e) {
                 $builder->getBuildLogger()->log('');
                 $builder->getBuildLogger()->logFailure(
-                    sprintf(
+                    \sprintf(
                         'BUILD FAILED! Exception: %s',
                         $e->getMessage()
                     ),
@@ -203,38 +210,29 @@ class BuildWorker
         }
     }
 
-    /**
-     * @param Job $job
-     */
-    protected function deleteJob(Job $job)
+    protected function deleteJob(Job $job): void
     {
         try {
             $this->pheanstalk->delete($job);
-        } catch (ServerException $e) {
+        } catch (Exception $e) {
             $this->logger->warning($e->getMessage());
         }
     }
 
-    /**
-     * @return bool
-     */
-    protected function canForceRewindLoop()
+    protected function canForceRewindLoop(): bool
     {
         try {
-            $peekedJob = $this->pheanstalk->peekReady($this->queueTube);
-        } catch (ServerException $e) {
+            $this->pheanstalk->peekReady();
+        } catch (Exception $e) {
             return true;
         }
 
         return false;
     }
 
-    /**
-     * @return bool
-     */
-    protected function canRunPeriodicalWork()
+    protected function canRunPeriodicalWork(): bool
     {
-        $currentTime = time();
+        $currentTime = \time();
         if (($this->lastPeriodical + 60) > $currentTime) {
             return false;
         }
@@ -244,18 +242,13 @@ class BuildWorker
         return true;
     }
 
-    /**
-     * @param Job $job
-     *
-     * @return bool
-     */
-    protected function verifyJob(Job $job)
+    protected function verifyJob(Job $job): bool
     {
-        $jobData = json_decode($job->getData(), true);
+        $jobData = \json_decode($job->getData(), true);
 
-        if (empty($jobData) || !is_array($jobData)) {
+        if (empty($jobData) || !\is_array($jobData)) {
             $this->logger->warning(
-                sprintf('Empty job (#%s) from the queue tube "%s"!', $job->getId(), $this->queueTube)
+                \sprintf('Empty job (#%s) from the queue tube "%s"!', $job->getId(), $this->queueTube)
             );
 
             return false;
@@ -271,7 +264,7 @@ class BuildWorker
             return false;
         } elseif (self::JOB_TYPE_BUILD !== $jobType) {
             $this->logger->warning(
-                sprintf(
+                \sprintf(
                     'Invalid job (#%s) type "%s" in the queue tube "%s"!',
                     $job->getId(),
                     $jobType,

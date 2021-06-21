@@ -2,9 +2,9 @@
 
 namespace PHPCensor\Plugin;
 
-use Exception;
 use HipChat\HipChat;
 use PHPCensor\Builder;
+use PHPCensor\Common\Exception\InvalidArgumentException;
 use PHPCensor\Model\Build;
 use PHPCensor\Plugin;
 
@@ -30,7 +30,7 @@ class HipchatNotify extends Plugin
     {
         return 'hipchat_notify';
     }
-    
+
     /**
      * {@inheritdoc}
      */
@@ -38,33 +38,36 @@ class HipchatNotify extends Plugin
     {
         parent::__construct($builder, $build, $options);
 
-        $version         = trim(file_get_contents(ROOT_DIR . 'VERSION.md'));
+        $version         = $this->builder->interpolate('%SYSTEM_VERSION%');
         $this->userAgent = 'PHP Censor/' . $version;
         $this->cookie    = "php-censor-cookie";
 
-        if (is_array($options) && isset($options['authToken']) && isset($options['room'])) {
-            $this->authToken = $options['authToken'];
-            $this->room = $options['room'];
+        if (!\is_array($options) || !isset($options['room']) || (!isset($options['authToken']) && !isset($options['auth_token']))) {
+            throw new InvalidArgumentException('Please define room and authToken for hipchat_notify plugin.');
+        }
 
-            if (isset($options['message'])) {
-                $this->message = $options['message'];
-            } else {
-                $this->message = '%PROJECT_TITLE% built at %BUILD_LINK%';
-            }
+        if (\array_key_exists('auth_token', $options)) {
+            $this->authToken = $options['auth_token'];
+        }
 
-            if (isset($options['color'])) {
-                $this->color = $options['color'];
-            } else {
-                $this->color = 'yellow';
-            }
+        $this->room = $options['room'];
 
-            if (isset($options['notify'])) {
-                $this->notify = $options['notify'];
-            } else {
-                $this->notify = false;
-            }
+        if (isset($options['message'])) {
+            $this->message = $options['message'];
         } else {
-            throw new Exception('Please define room and authToken for hipchat_notify plugin.');
+            $this->message = '%PROJECT_TITLE% built at %BUILD_LINK%';
+        }
+
+        if (isset($options['color'])) {
+            $this->color = $options['color'];
+        } else {
+            $this->color = 'yellow';
+        }
+
+        if (isset($options['notify'])) {
+            $this->notify = $options['notify'];
+        } else {
+            $this->notify = false;
         }
     }
 

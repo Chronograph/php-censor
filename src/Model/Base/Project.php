@@ -1,12 +1,12 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace PHPCensor\Model\Base;
 
 use DateTime;
 use Exception;
-use PHPCensor\Exception\InvalidArgumentException;
+use PHPCensor\Common\Exception\InvalidArgumentException;
 use PHPCensor\Model;
 
 class Project extends Model
@@ -30,7 +30,7 @@ class Project extends Model
     /**
      * @var array
      */
-    protected $data = [
+    protected array $data = [
         'id'                     => null,
         'title'                  => null,
         'reference'              => null,
@@ -401,7 +401,7 @@ class Project extends Model
      */
     public function getGroupId()
     {
-        return $this->data['group_id'];
+        return (int)$this->data['group_id'];
     }
 
     /**
@@ -457,7 +457,7 @@ class Project extends Model
      */
     public function getUserId()
     {
-        return $this->data['user_id'];
+        return (null !== $this->data['user_id']) ? (int)$this->data['user_id'] : null;
     }
 
     /**

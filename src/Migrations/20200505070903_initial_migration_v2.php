@@ -3,10 +3,11 @@
 use Phinx\Db\Adapter\MysqlAdapter;
 use Phinx\Migration\AbstractMigration;
 use PHPCensor\Model\Build;
+use PHPCensor\Common\Exception\RuntimeException;
 
 class InitialMigrationV2 extends AbstractMigration
 {
-    private const LATEST_V1_MIGRATION_NAME = 'FixedDatabase';
+    private const LATEST_V1_MIGRATION_NAME = 'FixedPhpStanPluginName';
 
     private function getLatestV1Migration()
     {
@@ -27,8 +28,8 @@ class InitialMigrationV2 extends AbstractMigration
         }
 
         if ($isIssetBuild || ($isIssetBuilds && !$this->getLatestV1Migration())) {
-            throw new \RuntimeException(
-                'You should upgrade your PHP Censor to latest 1.2 release before you can upgrade it to release 2.0'
+            throw new RuntimeException(
+                'You should upgrade your PHP Censor to latest 1.3 release before you can upgrade it to release 2.0'
             );
         }
 

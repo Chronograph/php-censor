@@ -29,6 +29,7 @@ Using PHP Censor
 * [Periodical builds](periodical_builds.md)
 * [Console commands](commands.md)
 * [CCMenu/CCTray integration](ccmenu.md)
+* [Known issues and workarounds](workarounds.md)
 
 Plugins
 -------
@@ -54,7 +55,7 @@ Plugins
 * [PDepend](plugins/pdepend.md) - `pdepend`
 * [Phan](plugins/phan.md) - `phan`
 * [Psalm](plugins/psalm.md) - `psalm`
-* [PHPStan](plugins/phpstan.md) - `phpstan`
+* [PHPStan](plugins/php_stan.md) - `php_stan`
 * [Pahout](plugins/pahout.md) - `pahout`
 * [Phlint](plugins/phlint.md) - `phlint`
 * [PHP Code Sniffer](plugins/php_code_sniffer.md) - `php_code_sniffer`
@@ -84,15 +85,15 @@ Plugins
 
 #### Notifications
 
-* [Campfire](plugins/campfire.md) - `campfire`
-* [Email](plugins/email.md) - `email`
+* [Campfire](plugins/campfire_notify.md) - `campfire_notify`
+* [Email](plugins/email_notify.md) - `email_notify`
 * [FlowDock](plugins/flowdock_notify.md) - `flowdock_notify`
 * [HipChat](plugins/hipchat_notify.md) - `hipchat_notify`
-* [IRC](plugins/irc.md) - `irc`
+* [IRC](plugins/irc_notify.md) - `irc_notify`
 * [Slack](plugins/slack_notify.md) - `slack_notify`
-* [Telegram](plugins/telegram.md) - `telegram`
+* [Telegram](plugins/telegram_notify.md) - `telegram_notify`
 * [Webhook](plugins/webhook_notify.md) - `webhook_notify`
-* [XMPP](plugins/xmpp.md) - `xmpp`
+* [XMPP](plugins/xmpp_notify.md) - `xmpp_notify`
 
 #### Other
 

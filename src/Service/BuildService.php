@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Service;
 
 use DateInterval;
@@ -7,14 +9,15 @@ use DateTime;
 use Exception;
 use Monolog\Logger;
 use Pheanstalk\Pheanstalk;
-use Pheanstalk\PheanstalkInterface;
+use Pheanstalk\Contract\PheanstalkInterface;
 use PHPCensor\BuildFactory;
-use PHPCensor\Config;
+use PHPCensor\ConfigurationInterface;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Model\Build;
 use PHPCensor\Model\Project;
 use PHPCensor\Store\BuildStore;
 use PHPCensor\Store\ProjectStore;
+use PHPCensor\StoreRegistry;
 use PHPCensor\Worker\BuildWorker;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Yaml\Exception\ParseException;
@@ -22,34 +25,34 @@ use Symfony\Component\Yaml\Yaml;
 
 /**
  * The build service handles the creation, duplication and deletion of builds.
+ *
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class BuildService
 {
-    /**
-     * @var BuildStore
-     */
-    protected $buildStore;
+    private BuildStore $buildStore;
 
-    /**
-     * @var ProjectStore
-     */
-    protected $projectStore;
+    private ProjectStore $projectStore;
 
-    /**
-     * @var bool
-     */
-    public $queueError = false;
+    private ConfigurationInterface $configuration;
 
-    /**
-     * @param BuildStore   $buildStore
-     * @param ProjectStore $projectStore
-     */
+    private StoreRegistry $storeRegistry;
+
+    public bool $queueError = false;
+
     public function __construct(
+        ConfigurationInterface $configuration,
+        StoreRegistry $storeRegistry,
         BuildStore $buildStore,
         ProjectStore $projectStore
     ) {
-        $this->buildStore   = $buildStore;
-        $this->projectStore = $projectStore;
+        $this->configuration = $configuration;
+        $this->storeRegistry = $storeRegistry;
+        $this->buildStore    = $buildStore;
+        $this->projectStore  = $projectStore;
     }
 
     /**
@@ -78,7 +81,7 @@ class BuildService
         $userId = null,
         $extra = null
     ) {
-        $build = new Build();
+        $build = new Build($this->storeRegistry);
         $build->setCreateDate(new DateTime());
         $build->setProjectId($project->getId());
         $build->setStatusPending();
@@ -92,6 +95,10 @@ class BuildService
         $build->addExtraValue('branches', $branches);
 
         $build->setSource($source);
+
+        if (!$userId) {
+            $userId = null;
+        }
         $build->setUserId($userId);
         $build->setCommitId((string)$commitId);
 
@@ -119,7 +126,7 @@ class BuildService
 
         if (!empty($buildId)) {
             $project = $build->getProject();
-            $build = BuildFactory::getBuild($build);
+            $build = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
             $build->sendStatusPostback();
             $this->addBuildToQueue(
                 $build,
@@ -249,7 +256,7 @@ class BuildService
      */
     public function createDuplicateBuild(Build $originalBuild, $source)
     {
-        $build = new Build();
+        $build = new Build($this->storeRegistry);
         $build->setParentId($originalBuild->getId());
         $build->setProjectId($originalBuild->getProjectId());
         $build->setCommitId($originalBuild->getCommitId());
@@ -269,7 +276,7 @@ class BuildService
         $buildId = $build->getId();
 
         if (!empty($buildId)) {
-            $build   = BuildFactory::getBuild($build);
+            $build   = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
             $project = $build->getProject();
             $build->sendStatusPostback();
             $this->addBuildToQueue(
@@ -288,7 +295,7 @@ class BuildService
      */
     public function deleteOldByProject($projectId)
     {
-        $keepBuilds = (int)Config::getInstance()->get('php-censor.build.keep_builds', 100);
+        $keepBuilds = (int)$this->configuration->get('php-censor.build.keep_builds', 100);
         $builds     = $this->buildStore->getOldByProject((int)$projectId, $keepBuilds);
 
         /** @var Build $build */
@@ -367,15 +374,13 @@ class BuildService
      */
     public function addJobToQueue($jobType, array $jobData, $queuePriority = PheanstalkInterface::DEFAULT_PRIORITY)
     {
-        $config   = Config::getInstance();
-        $settings = $config->get('php-censor.queue', []);
-
+        $settings = $this->configuration->get('php-censor.queue', []);
         if (!empty($settings['host']) && !empty($settings['name'])) {
             $jobData['type'] = $jobType;
             try {
-                $pheanstalk = new Pheanstalk(
+                $pheanstalk = Pheanstalk::create(
                     $settings['host'],
-                    $config->get('php-censor.queue.port', Pheanstalk::DEFAULT_PORT)
+                    $this->configuration->get('php-censor.queue.port', PheanstalkInterface::DEFAULT_PORT)
                 );
 
                 $pheanstalk->useTube($settings['name']);
@@ -383,7 +388,7 @@ class BuildService
                     json_encode($jobData),
                     $queuePriority,
                     PheanstalkInterface::DEFAULT_DELAY,
-                    $config->get('php-censor.queue.lifetime', 600)
+                    $this->configuration->get('php-censor.queue.lifetime', 600)
                 );
             } catch (Exception $ex) {
                 $this->queueError = true;

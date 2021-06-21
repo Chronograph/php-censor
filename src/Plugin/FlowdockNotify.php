@@ -6,6 +6,8 @@ use Exception;
 use FlowdockClient\Api\Push\Push;
 use FlowdockClient\Api\Push\TeamInboxMessage;
 use PHPCensor\Builder;
+use PHPCensor\Common\Exception\InvalidArgumentException;
+use PHPCensor\Common\Exception\RuntimeException;
 use PHPCensor\Model\Build;
 use PHPCensor\Plugin;
 
@@ -16,7 +18,7 @@ use PHPCensor\Plugin;
  */
 class FlowdockNotify extends Plugin
 {
-    protected $apiKey;
+    protected $authToken;
     protected $email;
     protected $message;
 
@@ -38,10 +40,14 @@ class FlowdockNotify extends Plugin
     {
         parent::__construct($builder, $build, $options);
 
-        if (!is_array($options) || !isset($options['api_key'])) {
-            throw new Exception('Please define the api_key for Flowdock Notify plugin!');
+        if (!is_array($options) || (!isset($options['api_key']) && !isset($options['auth_token']))) {
+            throw new InvalidArgumentException('Please define the "auth_token" for Flowdock Notify plugin!');
         }
-        $this->apiKey  = trim($options['api_key']);
+
+        if (\array_key_exists('auth_token', $options)) {
+            $this->authToken = $options['auth_token'];
+        }
+
         $this->message = isset($options['message']) ? $options['message'] : self::MESSAGE_DEFAULT;
         $this->email   = isset($options['email']) ? $options['email'] : 'PHP Censor';
     }
@@ -55,7 +61,7 @@ class FlowdockNotify extends Plugin
     {
         $message         = $this->builder->interpolate($this->message);
         $successfulBuild = $this->build->isSuccessful() ? 'Success' : 'Failed';
-        $push            = new Push($this->apiKey);
+        $push            = new Push($this->authToken);
         $flowMessage     = TeamInboxMessage::create()
             ->setSource("PHPCensor")
             ->setFromAddress($this->email)
@@ -66,7 +72,7 @@ class FlowdockNotify extends Plugin
             ->setContent($message);
 
         if (!$push->sendTeamInboxMessage($flowMessage, ['connect_timeout' => 5000, 'timeout' => 5000])) {
-            throw new Exception(sprintf('Flowdock Failed: %s', $flowMessage->getResponseErrors()));
+            throw new RuntimeException(sprintf('Flowdock Failed: %s', $flowMessage->getResponseErrors()));
         }
         return true;
     }

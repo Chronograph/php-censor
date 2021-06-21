@@ -1,49 +1,61 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Store;
 
 use DateTime;
-use PHPCensor\Config;
-use PHPCensor\Database;
+use PHPCensor\ConfigurationInterface;
+use PHPCensor\DatabaseManager;
 use PHPCensor\Model\BuildError;
+use PHPCensor\StoreRegistry;
 
 /**
- * Class BuildErrorWriter
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class BuildErrorWriter
 {
     /**
      * @var int
      */
-    protected $buildId;
+    private int $buildId;
 
     /**
      * @var int
      */
-    protected $projectId;
+    private int $projectId;
 
     /**
      * @var array
      */
-    protected $errors = [];
+    private array $errors = [];
+
+    private DatabaseManager $databaseManager;
+
+    private StoreRegistry $storeRegistry;
 
     /**
-     * @var int
-     *
      * @see https://stackoverflow.com/questions/40361164/pdoexception-sqlstatehy000-general-error-7-number-of-parameters-must-be-bet
      */
-    protected $bufferSize;
+    private int $bufferSize;
 
-    /**
-     * @param int $projectId
-     * @param int $buildId
-     */
-    public function __construct($projectId, $buildId)
-    {
-        $this->bufferSize = (int)Config::getInstance()->get('php-censor.build.writer_buffer_size', 500);
+    public function __construct(
+        ConfigurationInterface $configuration,
+        DatabaseManager $databaseManager,
+        StoreRegistry $storeRegistry,
+        int $projectId,
+        int $buildId
+    ) {
+        $this->bufferSize = (int)$configuration->get('php-censor.build.writer_buffer_size', 500);
 
         $this->projectId = $projectId;
         $this->buildId   = $buildId;
+
+        $this->databaseManager = $databaseManager;
+        $this->storeRegistry   = $storeRegistry;
     }
 
     /**
@@ -79,7 +91,7 @@ class BuildErrorWriter
         }
 
         /** @var BuildErrorStore $errorStore */
-        $errorStore = Factory::getStore('BuildError');
+        $errorStore = $this->storeRegistry->get('BuildError');
         $hash       = BuildError::generateHash($plugin, $file, $lineStart, $lineEnd, $severity, $message);
 
         $this->errors[] = [
@@ -149,7 +161,7 @@ class BuildErrorWriter
             )
             VALUES ' . join(', ', $insertValuesPlaceholders) . '
         ';
-        $stmt = Database::getConnection('write')->prepareCommon($query);
+        $stmt = $this->databaseManager->getConnection('write')->prepare($query);
         $stmt->execute($insertValuesData);
 
         $this->errors = [];

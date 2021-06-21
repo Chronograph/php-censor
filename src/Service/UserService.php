@@ -1,26 +1,33 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Service;
 
 use PHPCensor\Model\User;
 use PHPCensor\Store\UserStore;
+use PHPCensor\StoreRegistry;
 
 /**
  * The user service handles the creation, modification and deletion of users.
+ *
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class UserService
 {
-    /**
-     * @var UserStore
-     */
-    protected $store;
+    private UserStore $store;
 
-    /**
-     * @param UserStore $store
-     */
-    public function __construct(UserStore $store)
-    {
-        $this->store = $store;
+    private StoreRegistry $storeRegistry;
+
+    public function __construct(
+        StoreRegistry $storeRegistry,
+        UserStore $store
+    ) {
+        $this->storeRegistry = $storeRegistry;
+        $this->store         = $store;
     }
 
     /**
@@ -37,10 +44,10 @@ class UserService
      */
     public function createUser($name, $email, $providerKey, $providerData, $password, $isAdmin = false)
     {
-        $user = new User();
+        $user = new User($this->storeRegistry);
         $user->setName($name);
         $user->setEmail($email);
-        $user->setHash(password_hash($password, PASSWORD_DEFAULT));
+        $user->setHash(\password_hash($password, PASSWORD_DEFAULT));
         $user->setProviderKey($providerKey);
         $user->setProviderData($providerData);
         $user->setIsAdmin($isAdmin);

@@ -5,9 +5,58 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/) a
 [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 
-## [1.2.0 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.0) (2019-xx-xx)
+## [1.2.4 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.4) (2020-12-29)
 
-[Full Changelog](https://github.com/php-censor/php-censor/compare/1.1.4...1.2.0)
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.2.3...1.2.4)
+
+### Fixed
+
+- **[PhpLoc]** Error with XDebug 3+. Issue [#400](https://github.com/php-censor/php-censor/issues/400).
+- **[PhpUnit]** Plugin status when used coverage. Issue [#399](https://github.com/php-censor/php-censor/issues/399).
+
+
+## [1.2.3 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.3) (2020-11-12)
+
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.2.2...1.2.3)
+
+### Fixed
+
+- Creating builds from webhook. Issue [#396](https://github.com/php-censor/php-censor/issues/396).
+
+
+## [1.2.2 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.2) (2020-11-08)
+
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.2.1...1.2.2)
+
+### Fixed
+
+- **[SQLite]** PDO initialization. Issue [#377](https://github.com/php-censor/php-censor/issues/377).
+- **[BitbucketNotify]** Parameter `repository_lug` -> `repository_slug`. Issue 
+[#395](https://github.com/php-censor/php-censor/issues/395).
+- Installation with Composer version 2. Issue [#391](https://github.com/php-censor/php-censor/issues/391).
+- Case when working directory creation failed interpolation variables don't initialize. Issue 
+[#382](https://github.com/php-censor/php-censor/issues/382).
+- Case when comments on Github/Bitbucket failed all plugin fail too. Issue 
+[#383](https://github.com/php-censor/php-censor/issues/383).
+
+### Changed
+
+- Improved TravisCI config.
+
+
+## [1.2.1 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.1) (2020-09-26)
+
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.2.0...1.2.1)
+
+### Fixed
+
+- Fixed types for MySQL and rebuild. Issue [#372](https://github.com/php-censor/php-censor/issues/372).
+- **[Xmpp]** Fixed Xmpp class name.
+
+
+## [1.2.0 (Summer Smith)](https://github.com/php-censor/php-censor/tree/1.2.0) (2020-06-15)
+
+[Full Changelog](https://github.com/php-censor/php-censor/compare/1.1.6...1.2.0)
 
 ### Added
 
@@ -49,10 +98,6 @@ Thanks to [@Dave13h](https://github.com/Dave13h).
 [#335](https://github.com/php-censor/php-censor/pull/335). Thanks to [@xl32](https://github.com/xl32).
 - Many database scheme issues (Added foreign keys, improved columns types etc.). Issue 
 [#365](https://github.com/php-censor/php-censor/issues/365).
-
-### Removed
-
-- Useless installation and configuration option `php-censor.url`.
 
 ### Changed
 

@@ -1,18 +1,18 @@
 language: php
 
-sudo: false
+arch: amd64
+os:   linux
+dist: xenial
 
 cache:
     directories:
         - $HOME/.composer/cache
 
 php:
-    - 7.1
-    - 7.2
-    - 7.3
     - 7.4
+    - 8.0
 
-matrix:
+jobs:
     fast_finish: true
 
 services:
@@ -20,11 +20,11 @@ services:
     - postgresql
 
 install:
-    - composer selfupdate
+    - composer self-update --2
     - composer install
 
 script:
-    - vendor/bin/phpunit --configuration phpunit.xml.dist --coverage-clover=coverage.xml
+    -  php -d 'xdebug.mode=coverage' vendor/bin/phpunit --configuration phpunit.xml.dist --coverage-clover=coverage.xml
 
 after_success:
     - bash <(curl -s https://codecov.io/bash)

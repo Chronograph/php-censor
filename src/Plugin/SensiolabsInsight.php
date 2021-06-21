@@ -7,7 +7,7 @@ use PHPCensor;
 use PHPCensor\Builder;
 use PHPCensor\Model\Build;
 use PHPCensor\Plugin;
-use RuntimeException;
+use PHPCensor\Common\Exception\RuntimeException;
 
 /**
  * Sensiolabs Insight Plugin - Allows Sensiolabs Insight testing.
@@ -24,7 +24,7 @@ class SensiolabsInsight extends Plugin
     /**
      * @var string
      */
-    protected $apiToken;
+    protected $authToken;
 
     /**
      * @var string
@@ -60,19 +60,15 @@ class SensiolabsInsight extends Plugin
             $this->userUuid = $options['user_uuid'];
         }
 
-        if (array_key_exists('api_token', $options)) {
-            $this->apiToken = $options['api_token'];
+        if (\array_key_exists('auth_token', $options)) {
+            $this->authToken = $options['auth_token'];
         }
 
         if (array_key_exists('project_uuid', $options)) {
             $this->projectUuid = $options['project_uuid'];
         }
-        
-        if (array_key_exists('executable', $options)) {
-            $this->executable = $this->builder->interpolate($options['executable']);
-        } else {
-            $this->executable = $this->findBinary('insight');
-        }
+
+        $this->executable = $this->findBinary('insight');
     }
 
     /**
@@ -147,7 +143,7 @@ class SensiolabsInsight extends Plugin
             $cmd,
             $this->build->getBranch(),
             $this->projectUuid,
-            $this->apiToken,
+            $this->authToken,
             $this->userUuid
         );
 
@@ -157,7 +153,7 @@ class SensiolabsInsight extends Plugin
         $this->builder->executeCommand(
             $cmd,
             $this->projectUuid,
-            $this->apiToken,
+            $this->authToken,
             $this->userUuid
         );
     }
@@ -171,12 +167,10 @@ class SensiolabsInsight extends Plugin
      */
     protected function wasLastExecSuccessful($errorCount)
     {
-        $success = true;
-
         if ($this->allowedWarnings !== -1 && $errorCount > $this->allowedWarnings) {
-            $success = false;
-            return $success;
+            return false;
         }
-        return $success;
+
+        return true;
     }
 }

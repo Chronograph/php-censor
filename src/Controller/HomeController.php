@@ -2,19 +2,18 @@
 
 namespace PHPCensor\Controller;
 
-use PHPCensor\Config;
 use PHPCensor\Helper\Lang;
 use PHPCensor\WebController;
 
 /**
- * Home Controller - Displays the Dashboard.
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class HomeController extends WebController
 {
-    /**
-     * @var string
-     */
-    public $layoutName = 'layout';
+    public string $layoutName = 'layout';
 
     /**
     * Display dashboard:
@@ -28,7 +27,7 @@ class HomeController extends WebController
             'right' => [],
         ];
 
-        $widgetsConfig = Config::getInstance()->get('php-censor.dashboard_widgets', [
+        $widgetsConfig = $this->configuration->get('php-censor.dashboard_widgets', [
             'all_projects' => [
                 'side' => 'left',
             ],

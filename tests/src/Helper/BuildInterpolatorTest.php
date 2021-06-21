@@ -3,19 +3,33 @@
 namespace Tests\PHPCensor\Helper;
 
 use PHPCensor\Helper\BuildInterpolator;
+use PHPCensor\StoreRegistry;
 use PHPUnit\Framework\TestCase;
+use Prophecy\PhpUnit\ProphecyTrait;
 
 class BuildInterpolatorTest extends TestCase
 {
-    /**
-     * @var BuildInterpolator
-     */
-    protected $testedInterpolator;
+    use ProphecyTrait;
 
-    protected function setUp()
+    protected BuildInterpolator $testedInterpolator;
+
+    protected StoreRegistry $storeRegistry;
+
+    protected function setUp(): void
     {
-        parent::setup();
-        $this->testedInterpolator = new BuildInterpolator();
+        parent::setUp();
+
+        $configuration   = $this->getMockBuilder('PHPCensor\ConfigurationInterface')->getMock();
+        $databaseManager = $this
+            ->getMockBuilder('PHPCensor\DatabaseManager')
+            ->setConstructorArgs([$configuration])
+            ->getMock();
+        $this->storeRegistry = $this
+            ->getMockBuilder('PHPCensor\StoreRegistry')
+            ->setConstructorArgs([$databaseManager])
+            ->getMock();
+
+        $this->testedInterpolator = new BuildInterpolator($this->storeRegistry);
     }
 
     public function testInterpolate_LeavesStringsUnchangedByDefault()
@@ -37,7 +51,8 @@ class BuildInterpolatorTest extends TestCase
 
         $this->testedInterpolator->setupInterpolationVars(
             $build,
-            "php-censor.local"
+            'php-censor.local',
+            '1.0.0'
         );
 
         $actualOutput = $this->testedInterpolator->interpolate($string);

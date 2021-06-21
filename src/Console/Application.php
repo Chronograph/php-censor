@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Console;
 
 use Exception;
@@ -19,20 +21,23 @@ use PHPCensor\Command\InstallCommand;
 use PHPCensor\Command\RemoveOldBuildsCommand;
 use PHPCensor\Command\RebuildQueueCommand;
 use PHPCensor\Command\WorkerCommand;
-use PHPCensor\Config;
+use PHPCensor\ConfigurationInterface;
+use PHPCensor\DatabaseManager;
+use PHPCensor\Common\Exception\InvalidArgumentException;
 use PHPCensor\Logging\AnsiFormatter;
 use PHPCensor\Logging\Handler;
 use PHPCensor\Service\BuildService;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
 use PHPCensor\Store\ProjectStore;
 use PHPCensor\Store\UserStore;
+use PHPCensor\StoreRegistry;
 use Symfony\Component\Console\Application as BaseApplication;
 
 /**
- * Class Application
+ * @package    PHP Censor
+ * @subpackage Application
  *
- * @package PHPCensor\Console
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class Application extends BaseApplication
 {
@@ -46,13 +51,20 @@ class Application extends BaseApplication
 
 LOGO;
 
+    private ConfigurationInterface $configuration;
+
+    private DatabaseManager $databaseManager;
+
+    private StoreRegistry $storeRegistry;
+
     /**
-     * @param Config $applicationConfig
+     * @param ConfigurationInterface $applicationConfig
      *
      * @return Logger
+     *
      * @throws Exception
      */
-    protected function initLogger(Config $applicationConfig)
+    protected function initLogger(ConfigurationInterface $applicationConfig): Logger
     {
         $rotate   = (bool)$applicationConfig->get('php-censor.log.rotate', false);
         $maxFiles = (int)$applicationConfig->get('php-censor.log.max_files', 0);
@@ -73,45 +85,49 @@ LOGO;
         return $logger;
     }
 
-    /**
-     * @param string $name
-     * @param string $version
-     *
-     * @throws Exception
-     */
-    public function __construct($name = 'PHP Censor', $version = 'UNKNOWN')
-    {
-        $realVersion = trim(file_get_contents(ROOT_DIR . 'VERSION.md'));
-        if (!$realVersion) {
-            $realVersion = $version;
-        }
+    public function __construct(
+        ConfigurationInterface $configuration,
+        DatabaseManager $databaseManager,
+        StoreRegistry $storeRegistry,
+        string $name = 'PHP Censor',
+        string $version = 'UNKNOWN'
+    ) {
+        $version = \trim(\file_get_contents(ROOT_DIR . 'VERSION.md'));
+        $version = !empty($version) ? $version : '0.0.0 (UNKNOWN)';
 
-        parent::__construct($name, $realVersion);
+        parent::__construct($name, $version);
 
-        $applicationConfig = Config::getInstance();
-        $databaseSettings  = $applicationConfig->get('php-censor.database', []);
-        if (!$databaseSettings) {
-            throw new \RuntimeException(
+        $this->configuration   = $configuration;
+        $this->databaseManager = $databaseManager;
+        $this->storeRegistry   = $storeRegistry;
+
+        $oldDatabaseSettings = $this->configuration->get('b8.database', []);
+        $databaseSettings    = $this->configuration->get('php-censor.database', []);
+        if ($oldDatabaseSettings && !$databaseSettings) {
+            throw new InvalidArgumentException(
                 'Missing database settings in application config "config.yml" (Section: "php-censor.database")'
             );
         }
 
-        $phinxSettings = [
-            'paths' => [
-                'migrations' => ROOT_DIR . 'src/Migrations',
-            ],
-            'environments' => [
-                'default_migration_table' => 'migrations',
-                'default_database'        => 'php-censor',
-                'php-censor'              => [
-                    'adapter' => $databaseSettings['type'],
-                    'host' => $databaseSettings['servers']['write'][0]['host'],
-                    'name' => $databaseSettings['name'],
-                    'user' => $databaseSettings['username'],
-                    'pass' => $databaseSettings['password'],
+        $phinxSettings = [];
+        if ($databaseSettings) {
+            $phinxSettings = [
+                'paths' => [
+                    'migrations' => ROOT_DIR . 'src/Migrations',
                 ],
-            ],
-        ];
+                'environments' => [
+                    'default_migration_table' => 'migrations',
+                    'default_database'        => 'php-censor',
+                    'php-censor'              => [
+                        'adapter' => $databaseSettings['type'],
+                        'host' => $databaseSettings['servers']['write'][0]['host'],
+                        'name' => $databaseSettings['name'],
+                        'user' => $databaseSettings['username'],
+                        'pass' => $databaseSettings['password'],
+                    ],
+                ],
+            ];
+        }
 
         if (!empty($databaseSettings['port'])) {
             $phinxSettings['environments']['php-censor']['port'] =
@@ -126,7 +142,7 @@ LOGO;
         if (!empty($databaseSettings['type'])
             && $databaseSettings['type'] === 'pgsql'
         ) {
-            if (!array_key_exists('pgsql-sslmode', $databaseSettings['servers']['write'][0])) {
+            if (!\array_key_exists('pgsql-sslmode', $databaseSettings['servers']['write'][0])) {
                 $databaseSettings['servers']['write'][0]['pgsql-sslmode'] = 'prefer';
             }
 
@@ -158,32 +174,32 @@ LOGO;
         );
 
         /** @var UserStore $userStore */
-        $userStore = Factory::getStore('User');
+        $userStore = $this->storeRegistry->get('User');
 
         /** @var ProjectStore $projectStore */
-        $projectStore = Factory::getStore('Project');
+        $projectStore = $this->storeRegistry->get('Project');
 
         /** @var BuildStore $buildStore */
-        $buildStore   = Factory::getStore('Build');
+        $buildStore = $this->storeRegistry->get('Build');
 
-        $buildService = new BuildService($buildStore, $projectStore);
-        $logger       = $this->initLogger($applicationConfig);
+        $buildService = new BuildService(
+            $this->configuration,
+            $this->storeRegistry,
+            $buildStore,
+            $projectStore
+        );
+        $logger = $this->initLogger($this->configuration);
 
-        $this->add(new InstallCommand());
-        $this->add(new CreateAdminCommand($userStore));
-        $this->add(new CreateBuildCommand($projectStore, $buildService));
-        $this->add(new RemoveOldBuildsCommand($projectStore, $buildService));
-        $this->add(new WorkerCommand($logger, $buildService));
-        $this->add(new RebuildQueueCommand($logger));
-        $this->add(new CheckLocalizationCommand());
+        $this->add(new InstallCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger));
+        $this->add(new CreateAdminCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger, $userStore));
+        $this->add(new CreateBuildCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger, $projectStore, $buildService));
+        $this->add(new RemoveOldBuildsCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger, $projectStore, $buildService));
+        $this->add(new WorkerCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger, $buildService));
+        $this->add(new RebuildQueueCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger));
+        $this->add(new CheckLocalizationCommand($this->configuration, $this->databaseManager, $this->storeRegistry, $logger));
     }
 
-    /**
-     * Returns help.
-     *
-     * @return string
-     */
-    public function getHelp()
+    public function getHelp(): string
     {
         return self::LOGO . parent::getHelp();
     }
@@ -193,8 +209,8 @@ LOGO;
      *
      * @return string The long application version
      */
-    public function getLongVersion()
+    public function getLongVersion(): string
     {
-        return sprintf('<info>%s</info> v%s', $this->getName(), $this->getVersion());
+        return \sprintf('<info>%s</info> v%s', $this->getName(), $this->getVersion());
     }
 }

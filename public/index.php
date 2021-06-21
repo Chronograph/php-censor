@@ -1,8 +1,18 @@
 <?php
 
-session_start();
+use PHPCensor\ConfigurationInterface;
+use PHPCensor\DatabaseManager;
+use PHPCensor\StoreRegistry;
+use PHPCensor\Application;
+use PHPCensor\Http\Request;
 
-require_once(dirname(__DIR__) . '/bootstrap.php');
+\session_start();
 
-$fc = new PHPCensor\Application($config);
-print $fc->handleRequest();
+/** @var $configuration ConfigurationInterface */
+/** @var $databaseManager DatabaseManager */
+/** @var $storeRegistry StoreRegistry */
+require_once(\dirname(__DIR__) . '/bootstrap.php');
+
+$application = new Application($configuration, $storeRegistry, new Request());
+
+echo $application->handleRequest();

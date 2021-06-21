@@ -4,10 +4,11 @@ namespace PHPCensor\Controller;
 
 use Exception;
 use GuzzleHttp\Client;
-use PHPCensor\Config;
 use PHPCensor\Controller;
+use PHPCensor\Exception\HttpException\ForbiddenException;
 use PHPCensor\Exception\HttpException\NotFoundException;
-use PHPCensor\Exception\InvalidArgumentException;
+use PHPCensor\Common\Exception\InvalidArgumentException;
+use PHPCensor\Common\Exception\RuntimeException;
 use PHPCensor\Helper\Lang;
 use PHPCensor\Http\Response;
 use PHPCensor\Model\Build;
@@ -17,44 +18,41 @@ use PHPCensor\Model\Build\GithubBuild;
 use PHPCensor\Model\Project;
 use PHPCensor\Service\BuildService;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
+use PHPCensor\Store\EnvironmentStore;
 use PHPCensor\Store\ProjectStore;
 
 /**
- * Webhook Controller - Processes webhook pings from BitBucket, Github, Gitlab, Gogs, etc.
+ * @package    PHP Censor
+ * @subpackage Application
  *
  * @author Dan Cryer <dan@block8.co.uk>
  * @author Sami Tikka <stikka@iki.fi>
  * @author Alex Russell <alex@clevercherry.com>
  * @author Guillaume Perréal <adirelle@gmail.com>
- *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class WebhookController extends Controller
 {
-    /**
-     * @var BuildStore
-     */
-    protected $buildStore;
+    protected BuildStore $buildStore;
 
-    /**
-     * @var ProjectStore
-     */
-    protected $projectStore;
+    protected ProjectStore $projectStore;
 
-    /**
-     * @var BuildService
-     */
-    protected $buildService;
+    protected BuildService $buildService;
 
     /**
      * Initialise the controller, set up stores and services.
      */
-    public function init()
+    public function init(): void
     {
-        $this->buildStore   = Factory::getStore('Build');
-        $this->projectStore = Factory::getStore('Project');
+        $this->buildStore   = $this->storeRegistry->get('Build');
+        $this->projectStore = $this->storeRegistry->get('Project');
 
-        $this->buildService = new BuildService($this->buildStore, $this->projectStore);
+        $this->buildService = new BuildService(
+            $this->configuration,
+            $this->storeRegistry,
+            $this->buildStore,
+            $this->projectStore
+        );
     }
 
     /**
@@ -65,7 +63,7 @@ class WebhookController extends Controller
      *
      * @return Response
      */
-    public function handleAction($action, $actionParams)
+    public function handleAction(string $action, array $actionParams): Response
     {
         $response = new Response\JsonResponse();
         try {
@@ -106,7 +104,8 @@ class WebhookController extends Controller
         $tag,
         $committer,
         $commitMessage,
-        array $extra = null
+        array $extra = null,
+        $environment = null
     ) {
         if ($project->getArchived()) {
             throw new NotFoundException(Lang::get('project_x_not_found', $project->getId()));
@@ -135,36 +134,38 @@ class WebhookController extends Controller
 
         $environments = $project->getEnvironmentsObjects();
         if ($environments['count']) {
-            $createdBuilds    = [];
-            $environmentIds = $project->getEnvironmentsNamesByBranch($branch);
-            // use base branch from project
-            if (!empty($environmentIds)) {
-                $duplicates = [];
-                foreach ($environmentIds as $environmentId) {
-                    if (!in_array($environmentId, $ignoreEnvironments) ||
-                        ($tag && !in_array($tag, $ignoreTags, true))) {
-                        // If not, create a new build job for it:
-                        $build = $this->buildService->createBuild(
-                            $project,
-                            $environmentId,
-                            $commitId,
-                            $project->getDefaultBranch(),
-                            $tag,
-                            $committer,
-                            $commitMessage,
-                            (int)$source,
-                            0,
-                            $extra
-                        );
+            $createdBuilds = [];
 
-                        $createdBuilds[] = [
-                            'id'          => $build->getID(),
-                            'environment' => $environmentId,
-                        ];
-                    } else {
-                        $duplicates[] = \array_search($environmentId, $ignoreEnvironments);
-                    }
+            /** @var EnvironmentStore $environmentStore */
+            $environmentStore  = $this->storeRegistry->get('Environment');
+            $environmentObject = $environmentStore->getByNameAndProjectId($environment, $project->getId());
+            if ($environment && $environmentObject) {
+                if (
+                    !in_array($environmentObject->getId(), $ignoreEnvironments) ||
+                    ($tag && !in_array($tag, $ignoreTags, true))
+                ) {
+                    // If not, create a new build job for it:
+                    $build = $this->buildService->createBuild(
+                        $project,
+                        $environmentObject->getId(),
+                        $commitId,
+                        $project->getDefaultBranch(),
+                        $tag,
+                        $committer,
+                        $commitMessage,
+                        (int)$source,
+                        null,
+                        $extra
+                    );
+
+                    $createdBuilds[] = [
+                        'id'          => $build->getID(),
+                        'environment' => $environmentObject->getId(),
+                    ];
+                } else {
+                    $duplicates[] = \array_search($environmentObject->getId(), $ignoreEnvironments);
                 }
+
                 if (!empty($createdBuilds)) {
                     if (empty($duplicates)) {
                         return ['status' => 'ok', 'builds' => $createdBuilds];
@@ -188,7 +189,63 @@ class WebhookController extends Controller
                     ];
                 }
             } else {
-                return ['status' => 'ignored', 'message' => 'Branch not assigned to any environment'];
+                $environmentIds = $project->getEnvironmentsNamesByBranch($branch);
+                // use base branch from project
+                if (!empty($environmentIds)) {
+                    $duplicates = [];
+                    foreach ($environmentIds as $environmentId) {
+                        if (
+                            !in_array($environmentId, $ignoreEnvironments) ||
+                            ($tag && !in_array($tag, $ignoreTags, true))
+                        ) {
+                            // If not, create a new build job for it:
+                            $build = $this->buildService->createBuild(
+                                $project,
+                                $environmentId,
+                                $commitId,
+                                $project->getDefaultBranch(),
+                                $tag,
+                                $committer,
+                                $commitMessage,
+                                (int)$source,
+                                null,
+                                $extra
+                            );
+
+                            $createdBuilds[] = [
+                                'id'          => $build->getID(),
+                                'environment' => $environmentId,
+                            ];
+                        } else {
+                            $duplicates[] = \array_search($environmentId, $ignoreEnvironments);
+                        }
+                    }
+
+                    if (!empty($createdBuilds)) {
+                        if (empty($duplicates)) {
+                            return ['status' => 'ok', 'builds' => $createdBuilds];
+                        } else {
+                            return [
+                                'status'  => 'ok',
+                                'builds'  => $createdBuilds,
+                                'message' => sprintf(
+                                    'For this commit some builds already exists (%s)',
+                                    implode(', ', $duplicates)
+                                )
+                            ];
+                        }
+                    } else {
+                        return [
+                            'status'  => 'ignored',
+                            'message' => sprintf(
+                                'For this commit already created builds (%s)',
+                                implode(', ', $duplicates)
+                            )
+                        ];
+                    }
+                } else {
+                    return ['status' => 'ignored', 'message' => 'Branch not assigned to any environment'];
+                }
             }
         } else {
             $environmentId = null;
@@ -203,7 +260,7 @@ class WebhookController extends Controller
                     $committer,
                     $commitMessage,
                     (int)$source,
-                    0,
+                    null,
                     $extra
                 );
 
@@ -233,7 +290,7 @@ class WebhookController extends Controller
     protected function fetchProject($projectId, array $expectedType)
     {
         if (empty($projectId)) {
-            throw new Exception('Project does not exist: ' . $projectId);
+            throw new NotFoundException('Project does not exist: ' . $projectId);
         }
 
         if (is_numeric($projectId)) {
@@ -241,16 +298,16 @@ class WebhookController extends Controller
         } else {
             $projects = $this->projectStore->getByTitle($projectId, 2);
             if ($projects['count'] < 1) {
-                throw new Exception('Project does not found: ' . $projectId);
+                throw new NotFoundException('Project does not found: ' . $projectId);
             }
             if ($projects['count'] > 1) {
-                throw new Exception('Project id is ambiguous: ' . $projectId);
+                throw new NotFoundException('Project id is ambiguous: ' . $projectId);
             }
             $project = reset($projects['items']);
         }
 
         if (!in_array($project->getType(), $expectedType, true)) {
-            throw new Exception('Wrong project type: ' . $project->getType());
+            throw new NotFoundException('Wrong project type: ' . $project->getType());
         }
 
         return $project;
@@ -272,6 +329,7 @@ class WebhookController extends Controller
             Project::TYPE_GIT,
         ]);
         $branch        = $this->getParam('branch', $project->getDefaultBranch());
+        $environment   = $this->getParam('environment');
         $commit        = $this->getParam('commit');
         $commitMessage = $this->getParam('message');
         $committer     = $this->getParam('committer');
@@ -283,7 +341,9 @@ class WebhookController extends Controller
             $branch,
             null,
             $committer,
-            $commitMessage
+            $commitMessage,
+            null,
+            $environment
         );
     }
 
@@ -463,11 +523,11 @@ class WebhookController extends Controller
             ];
         }
 
-        $username    = Config::getInstance()->get('php-censor.bitbucket.username');
-        $appPassword = Config::getInstance()->get('php-censor.bitbucket.app_password');
+        $username    = $this->configuration->get('php-censor.bitbucket.username');
+        $appPassword = $this->configuration->get('php-censor.bitbucket.app_password');
 
         if (empty($username) || empty($appPassword)) {
-            throw new Exception('Please provide Username and App Password of your Bitbucket account.');
+            throw new ForbiddenException('Please provide Username and App Password of your Bitbucket account.');
         }
 
         $commitsUrl = $payload['pullrequest']['links']['commits']['href'];
@@ -480,7 +540,7 @@ class WebhookController extends Controller
 
         // Check we got a success response:
         if ($httpStatus < 200 || $httpStatus >= 300) {
-            throw new Exception('Could not get commits, failed API request.');
+            throw new RuntimeException('Could not get commits, failed API request.');
         }
 
         $results = [];
@@ -747,7 +807,7 @@ class WebhookController extends Controller
         }
 
         $headers = [];
-        $token   = Config::getInstance()->get('php-censor.github.token');
+        $token   = $this->configuration->get('php-censor.github.token');
 
         if (!empty($token)) {
             $headers['Authorization'] = 'token ' . $token;
@@ -756,7 +816,7 @@ class WebhookController extends Controller
         $url = $payload['pull_request']['commits_url'];
 
         //for large pull requests, allow grabbing more then the default number of commits
-        $customPerPage = Config::getInstance()->get('php-censor.github.per_page');
+        $customPerPage = $this->configuration->get('php-censor.github.per_page');
         $params        = [];
         if ($customPerPage) {
             $params['per_page'] = $customPerPage;
@@ -771,7 +831,7 @@ class WebhookController extends Controller
 
         // Check we got a success response:
         if ($status < 200 || $status >= 300) {
-            throw new Exception('Could not get commits, failed API request.');
+            throw new RuntimeException('Could not get commits, failed API request.');
         }
 
         $results = [];
@@ -1009,7 +1069,7 @@ class WebhookController extends Controller
 
         $envsUpdated = [];
         $envObjects  = $project->getEnvironmentsObjects();
-        $store       = Factory::getStore('Environment');
+        $store       = $this->storeRegistry->get('Environment');
         foreach ($envObjects['items'] as $environment) {
             $branches = $environment->getBranches();
             if (in_array($environment->getName(), $envs)) {
@@ -1049,7 +1109,7 @@ class WebhookController extends Controller
                     null,
                     null,
                     Build::SOURCE_WEBHOOK_PUSH,
-                    0,
+                    null,
                     null
                 );
             }

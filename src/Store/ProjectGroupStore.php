@@ -1,29 +1,27 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace PHPCensor\Store;
 
 use PDO;
-use PHPCensor\Database;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Model\ProjectGroup;
 use PHPCensor\Store;
 
+/**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
+ */
 class ProjectGroupStore extends Store
 {
-    /**
-     * @var string
-     */
-    protected $tableName  = 'project_groups';
+    protected string $tableName  = 'project_groups';
 
-    /**
-     * @var string
-     */
-    protected $modelName  = '\PHPCensor\Model\ProjectGroup';
+    protected ?string $modelName  = '\PHPCensor\Model\ProjectGroup';
 
-    /**
-     * @var string
-     */
-    protected $primaryKey = 'id';
+    protected ?string $primaryKey = 'id';
 
     /**
      * Get a ProjectGroup by primary key (Id)
@@ -33,7 +31,7 @@ class ProjectGroupStore extends Store
      *
      * @return null|ProjectGroup
      */
-    public function getByPrimaryKey($key, $useConnection = 'read')
+    public function getByPrimaryKey($key, string $useConnection = 'read'): ?ProjectGroup
     {
         return $this->getById($key, $useConnection);
     }
@@ -55,13 +53,13 @@ class ProjectGroupStore extends Store
         }
 
         $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{id}} = :id LIMIT 1';
-        $stmt  = Database::getConnection($useConnection)->prepareCommon($query);
+        $stmt  = $this->databaseManager->getConnection($useConnection)->prepare($query);
 
         $stmt->bindValue(':id', $id);
 
         if ($stmt->execute()) {
             if ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                return new ProjectGroup($data);
+                return new ProjectGroup($this->storeRegistry, $data);
             }
         }
 
@@ -85,13 +83,13 @@ class ProjectGroupStore extends Store
         }
 
         $query = 'SELECT * FROM {{' . $this->tableName . '}} WHERE {{title}} = :title LIMIT 1';
-        $stmt  = Database::getConnection($useConnection)->prepareCommon($query);
+        $stmt  = $this->databaseManager->getConnection($useConnection)->prepare($query);
 
         $stmt->bindValue(':title', $title);
 
         if ($stmt->execute()) {
             if ($data = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                return new ProjectGroup($data);
+                return new ProjectGroup($this->storeRegistry, $data);
             }
         }
 

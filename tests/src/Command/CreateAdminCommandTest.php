@@ -3,8 +3,11 @@
 namespace Tests\PHPCensor\Command;
 
 use PHPCensor\Command\CreateAdminCommand;
+use PHPCensor\ConfigurationInterface;
+use PHPCensor\DatabaseManager;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
-use PHPUnit_Framework_MockObject_MockObject;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Helper\QuestionHelper;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -12,30 +15,49 @@ use Symfony\Component\Console\Tester\CommandTester;
 class CreateAdminCommandTest extends TestCase
 {
     /**
-     * @var CreateAdminCommand|PHPUnit_Framework_MockObject_MockObject
+     * @var CreateAdminCommand|MockObject
      */
     protected $command;
 
     /**
-     * @var Application|PHPUnit_Framework_MockObject_MockObject
+     * @var Application|MockObject
      */
     protected $application;
 
     /**
-     * @var QuestionHelper|PHPUnit_Framework_MockObject_MockObject
+     * @var QuestionHelper|MockObject
      */
     protected $helper;
 
-    public function setUp()
+    protected ConfigurationInterface $configuration;
+
+    protected DatabaseManager $databaseManager;
+
+    protected LoggerInterface $logger;
+
+    protected function setUp(): void
     {
         parent::setUp();
 
-        $userStoreMock = $this->getMockBuilder('PHPCensor\\Store\\UserStore')->getMock();
+        $this->configuration   = $this->getMockBuilder('PHPCensor\ConfigurationInterface')->getMock();
+        $this->databaseManager = $this
+            ->getMockBuilder('PHPCensor\DatabaseManager')
+            ->setConstructorArgs([$this->configuration])
+            ->getMock();
+        $storeRegistry = $this
+            ->getMockBuilder('PHPCensor\StoreRegistry')
+            ->setConstructorArgs([$this->databaseManager])
+            ->getMock();
+        $this->logger  = $this->getMockBuilder('Psr\Log\LoggerInterface')->getMock();
+        $userStoreMock = $this
+            ->getMockBuilder('PHPCensor\Store\UserStore')
+            ->setConstructorArgs([$this->databaseManager, $storeRegistry])
+            ->getMock();
 
-        $this->command = new CreateAdminCommand($userStoreMock);
+        $this->command = new CreateAdminCommand($this->configuration, $this->databaseManager, $storeRegistry, $this->logger, $userStoreMock);
 
         $this->helper = $this
-            ->getMockBuilder('Symfony\\Component\\Console\\Helper\\QuestionHelper')
+            ->getMockBuilder('Symfony\Component\Console\Helper\QuestionHelper')
             ->setMethods(['ask'])
             ->getMock();
 
@@ -49,16 +71,15 @@ class CreateAdminCommandTest extends TestCase
     {
         $this->application->getHelperSet()->set($this->helper, 'question');
         $this->application->add($this->command);
-        $commandTester = new CommandTester($this->command);
 
-        return $commandTester;
+        return new CommandTester($this->command);
     }
 
     public function testExecute()
     {
-        $this->helper->expects($this->at(0))->method('ask')->will($this->returnValue('test@example.com'));
-        $this->helper->expects($this->at(1))->method('ask')->will($this->returnValue('A name'));
-        $this->helper->expects($this->at(2))->method('ask')->will($this->returnValue('foobar123'));
+        $this->helper->method('ask')->will($this->returnValue('test@example.com'));
+        $this->helper->method('ask')->will($this->returnValue('A name'));
+        $this->helper->method('ask')->will($this->returnValue('foobar123'));
 
         $commandTester = $this->getCommandTester();
         $commandTester->execute([]);

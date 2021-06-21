@@ -1,39 +1,23 @@
 <?php
 
-if (!defined('ROOT_DIR')) {
-    define('ROOT_DIR', __DIR__ . '/');
-}
+use PHPCensor\Configuration;
+use PHPCensor\DatabaseManager;
+use PHPCensor\Helper\Lang;
+use PHPCensor\StoreRegistry;
 
-if (!defined('SRC_DIR')) {
-    define('SRC_DIR', ROOT_DIR . 'src/');
-}
-
-if (!defined('PUBLIC_DIR')) {
-    define('PUBLIC_DIR', ROOT_DIR . 'public/');
-}
-
-if (!defined('APP_DIR')) {
-    define('APP_DIR', ROOT_DIR . 'app/');
-}
-
-if (!defined('BIN_DIR')) {
-    define('BIN_DIR', ROOT_DIR . 'bin/');
-}
-
-if (!defined('RUNTIME_DIR')) {
-    define('RUNTIME_DIR', ROOT_DIR . 'runtime/');
-}
+const ROOT_DIR    = __DIR__ . '/';
+const SRC_DIR     = ROOT_DIR . 'src/';
+const PUBLIC_DIR  = ROOT_DIR . 'public/';
+const APP_DIR     = ROOT_DIR . 'app/';
+const RUNTIME_DIR = ROOT_DIR . 'runtime/';
 
 require_once(ROOT_DIR . 'vendor/autoload.php');
 
-use PHPCensor\Config;
-use PHPCensor\Helper\Lang;
+$configurationPath = APP_DIR . 'config.yml';
+$configuration   = new Configuration($configurationPath);
+$databaseManager = new DatabaseManager($configuration);
+$storeRegistry   = new StoreRegistry($databaseManager);
 
-$config = new Config();
+\define('APP_URL', $configuration->get('php-censor.url', '') . '/');
 
-$configFile = APP_DIR . 'config.yml';
-if (file_exists($configFile)) {
-    $config->loadYaml($configFile);
-}
-
-Lang::init($config);
+Lang::init($configuration, $storeRegistry);

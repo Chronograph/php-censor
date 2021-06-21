@@ -2,7 +2,6 @@
 
 namespace PHPCensor\Controller;
 
-use PHPCensor\Config;
 use PHPCensor\Exception\HttpException;
 use PHPCensor\Form;
 use PHPCensor\Form\Element\Checkbox;
@@ -14,41 +13,33 @@ use PHPCensor\Helper\Email;
 use PHPCensor\Helper\Lang;
 use PHPCensor\Http\Response\RedirectResponse;
 use PHPCensor\Security\Authentication\Service;
-use PHPCensor\Store\Factory;
 use PHPCensor\Store\UserStore;
 use PHPCensor\WebController;
 
 /**
- * Session Controller - Handles user login / logout.
+ * @package    PHP Censor
+ * @subpackage Application
  *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class SessionController extends WebController
 {
-    /**
-     * @var string
-     */
-    public $layoutName = 'layoutSession';
+    public string $layoutName = 'layoutSession';
 
-    /**
-     * @var UserStore
-     */
-    protected $userStore;
+    protected UserStore $userStore;
 
-    /**
-     * @var Service
-     */
-    protected $authentication;
+    protected Service $authentication;
 
     /**
      * Initialise the controller, set up stores and services.
      */
-    public function init()
+    public function init(): void
     {
         parent::init();
 
-        $this->userStore      = Factory::getStore('User');
-        $this->authentication = Service::getInstance();
+        $this->userStore      = $this->storeRegistry->get('User');
+        $this->authentication = new Service($this->configuration, $this->storeRegistry);
     }
 
     protected function loginForm($values)
@@ -100,7 +91,7 @@ class SessionController extends WebController
                 $_SESSION['php-censor-user-id'] = $user->getId();
 
                 $response = new RedirectResponse();
-                $response->setHeader('Location', APP_URL);
+                $response->setHeader('Location', $this->getLoginRedirect());
 
                 return $response;
             }
@@ -167,7 +158,7 @@ class SessionController extends WebController
                     }
 
                     $response = new RedirectResponse();
-                    $response->setHeader('Location', APP_URL);
+                    $response->setHeader('Location', $this->getLoginRedirect());
 
                     return $response;
                 }
@@ -225,7 +216,7 @@ class SessionController extends WebController
             $key     = md5(date('Y-m-d') . $user->getHash());
             $message = Lang::get('reset_email_body', $user->getName(), APP_URL, $user->getId(), $key);
 
-            $email = new Email(Config::getInstance());
+            $email = new Email($this->configuration);
             $email->setEmailTo($user->getEmail(), $user->getName());
             $email->setSubject(Lang::get('reset_email_title', $user->getName()));
             $email->setBody($message);
@@ -270,5 +261,21 @@ class SessionController extends WebController
         $this->view->key = $key;
 
         return $this->view->render();
+    }
+
+    /**
+     * Get the URL the user was trying to go to prior to being asked to log in.
+     * @return string
+     */
+    protected function getLoginRedirect()
+    {
+        $rtn = APP_URL;
+
+        if (!empty($_SESSION['php-censor-login-redirect'])) {
+            $rtn .= $_SESSION['php-censor-login-redirect'];
+            $_SESSION['php-censor-login-redirect'] = null;
+        }
+
+        return $rtn;
     }
 }

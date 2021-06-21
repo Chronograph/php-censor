@@ -2,7 +2,7 @@
 
 namespace PHPCensor\Helper;
 
-use Exception;
+use PHPCensor\Common\Exception\RuntimeException;
 use PHPCensor\Logging\BuildLogger;
 use Symfony\Component\Process\Process;
 
@@ -101,7 +101,7 @@ class CommandExecutor implements CommandExecutorInterface
 
         $command = call_user_func_array('sprintf', $args);
 
-        $this->logger->logDebug('Command: ' . $command);
+        $this->logger->log('Shell command: ' . $command);
 
         $withNoExit = '';
         foreach (self::$noExitCommands as $nec) {
@@ -359,7 +359,7 @@ class CommandExecutor implements CommandExecutorInterface
             }
         }
 
-        throw new Exception(sprintf('Could not find %s', implode('/', $binary)));
+        throw new RuntimeException(sprintf('Could not find %s', implode('/', $binary)));
     }
 
     /**

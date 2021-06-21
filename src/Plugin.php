@@ -4,10 +4,13 @@ namespace PHPCensor;
 
 use Exception;
 use PHPCensor\Model\Build;
-use PHPCensor\Plugin\Codeception;
 
 /**
+ * @package    PHP Censor
+ * @subpackage Application
+ *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 abstract class Plugin
 {
@@ -72,6 +75,8 @@ abstract class Plugin
      * @var array
      */
     protected $binaryName = [];
+
+    protected ?StoreRegistry $storeRegistry = null;
 
     /**
      * @param Builder $builder
@@ -296,5 +301,10 @@ abstract class Plugin
     public static function pluginName()
     {
         return '';
+    }
+
+    public function setStoreRegistry(StoreRegistry $storeRegistry)
+    {
+        $this->storeRegistry = $storeRegistry;
     }
 }

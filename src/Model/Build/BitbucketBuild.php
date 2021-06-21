@@ -5,7 +5,6 @@ namespace PHPCensor\Model\Build;
 use Exception;
 use GuzzleHttp\Client;
 use PHPCensor\Builder;
-use PHPCensor\Config;
 use PHPCensor\Helper\Bitbucket;
 use PHPCensor\Helper\Diff;
 use PHPCensor\Model\Build;
@@ -87,14 +86,14 @@ class BitbucketBuild extends GitBuild
             return false;
         }
 
-        $username    = Config::getInstance()->get('php-censor.bitbucket.username');
-        $appPassword = Config::getInstance()->get('php-censor.bitbucket.app_password');
+        $username    = $this->configuration->get('php-censor.bitbucket.username');
+        $appPassword = $this->configuration->get('php-censor.bitbucket.app_password');
 
         if (empty($username) || empty($appPassword) || empty($this->data['id'])) {
             return false;
         }
 
-        $allowStatusCommit = (bool)Config::getInstance()->get(
+        $allowStatusCommit = (bool)$this->configuration->get(
             'php-censor.bitbucket.status.commit',
             false
         );
@@ -123,7 +122,7 @@ class BitbucketBuild extends GitBuild
                 break;
         }
 
-        $phpCensorUrl = Config::getInstance()->get('php-censor.url');
+        $phpCensorUrl = $this->configuration->get('php-censor.url');
 
         $url = sprintf(
             '/2.0/repositories/%s/commit/%s/statuses/build',
@@ -151,7 +150,7 @@ class BitbucketBuild extends GitBuild
             ],
         ]);
 
-        $status = (int)$response->getStatusCode();
+        $status = $response->getStatusCode();
 
         return ($status >= 200 && $status < 300);
     }
@@ -175,22 +174,13 @@ class BitbucketBuild extends GitBuild
     /**
      * Get a template to use for generating links to files.
      *
-     * @return string|null
+     * @return string
      */
     public function getFileLinkTemplate()
     {
-        $reference = $this->getProject()->getReference();
+        $bitbucket = new Bitbucket($this->configuration);
 
-        if (in_array($this->getSource(), Build::$pullRequestSources, true)) {
-            $reference = $this->getExtra('remote_reference');
-        }
-
-        $link = 'https://bitbucket.org/' . $reference . '/';
-        $link .= 'src/' . $this->getCommitId() . '/';
-        $link .= '{FILE}';
-        $link .= '#{BASEFILE}-{LINE}';
-
-        return $link;
+        return $bitbucket->getFileLinkTemplate($this);
     }
 
     /**
@@ -203,7 +193,7 @@ class BitbucketBuild extends GitBuild
 
         try {
             if (in_array($this->getSource(), Build::$pullRequestSources, true)) {
-                $helper = new Bitbucket();
+                $helper = new Bitbucket($this->configuration);
                 $diff = $helper->getPullRequestDiff(
                     $this->getProject()->getReference(),
                     $this->getExtra('pull_request_number')
@@ -260,43 +250,47 @@ class BitbucketBuild extends GitBuild
         $lineStart = null,
         $lineEnd = null
     ) {
-        $allowCommentCommit = (bool)Config::getInstance()->get(
-            'php-censor.bitbucket.comments.commit',
-            false
-        );
+        parent::reportError($builder, $plugin, $message, $severity, $file, $lineStart, $lineEnd);
 
-        $allowCommentPullRequest = (bool)Config::getInstance()->get(
-            'php-censor.bitbucket.comments.pull_request',
-            false
-        );
+        try {
+            $allowCommentCommit = (bool)$this->configuration->get(
+                'php-censor.bitbucket.comments.commit',
+                false
+            );
 
-        if ($allowCommentCommit || $allowCommentPullRequest) {
-            if ($file) {
-                $diffLineNumber = $this->getDiffLineNumber($builder, $file, $lineStart);
+            $allowCommentPullRequest = (bool)$this->configuration->get(
+                'php-censor.bitbucket.comments.pull_request',
+                false
+            );
 
-                if (!is_null($diffLineNumber)) {
-                    $helper = new Bitbucket();
+            if ($allowCommentCommit || $allowCommentPullRequest) {
+                if ($file) {
+                    $diffLineNumber = $this->getDiffLineNumber($builder, $file, $lineStart);
 
-                    $repo     = $this->getProject()->getReference();
-                    $prNumber = $this->getExtra('pull_request_number');
-                    $commit   = $this->getCommitId();
+                    if (!is_null($diffLineNumber)) {
+                        $helper = new Bitbucket($this->configuration);
 
-                    if (!empty($prNumber)) {
-                        if ($allowCommentPullRequest) {
-                            $helper->createPullRequestComment($repo, $prNumber, $commit, $file, $lineStart, $message);
-                        }
-                    } else {
-                        if ($allowCommentCommit) {
-                            $helper->createCommitComment($repo, $commit, $file, $lineStart, $message);
+                        $repo     = $this->getProject()->getReference();
+                        $prNumber = $this->getExtra('pull_request_number');
+                        $commit   = $this->getCommitId();
+
+                        if (!empty($prNumber)) {
+                            if ($allowCommentPullRequest) {
+                                $helper->createPullRequestComment($repo, $prNumber, $commit, $file, $lineStart, $message);
+                            }
+                        } else {
+                            if ($allowCommentCommit) {
+                                $helper->createCommitComment($repo, $commit, $file, $lineStart, $message);
+                            }
                         }
                     }
                 }
             }
+        } catch (\Throwable $e) {
+            $builder->getBuildLogger()->logFailure('Exception: ' . $e->getMessage(), $e);
         }
-
-        parent::reportError($builder, $plugin, $message, $severity, $file, $lineStart, $lineEnd);
     }
-    
+
     /**
      * Uses git diff to figure out what the diff line position is, based on the error line number.
      *

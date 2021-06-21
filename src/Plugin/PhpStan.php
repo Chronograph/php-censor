@@ -17,6 +17,9 @@ use PHPCensor\Plugin;
  */
 class PhpStan extends Plugin
 {
+    /** @var string[] */
+    protected $directories = [];
+
     /** @var int */
     protected $allowedErrors = 0;
 
@@ -33,7 +36,18 @@ class PhpStan extends Plugin
 
         $this->executable = $this->findBinary(['phpstan', 'phpstan.phar']);
 
-        if (isset($options['allowed_errors']) && is_int($options['allowed_errors'])) {
+        if (!empty($options['directories']) && \is_array($options['directories'])) {
+            $this->directories = $options['directories'];
+        } elseif (!empty($options['directory']) && \is_string($options['directory'])) {
+            /** @deprecated Option "directory" as space-separated list is deprecated. Use the option "directories" instead. */
+            $this->directories = \explode(' ', $options['directory']);
+
+            $this->builder->logWarning(
+                '[DEPRECATED] Option "directory" as space-separated list is deprecated. Use the option "directories" instead.'
+            );
+        }
+
+        if (isset($options['allowed_errors']) && \is_int($options['allowed_errors'])) {
             $this->allowedErrors = $options['allowed_errors'];
         }
     }
@@ -43,16 +57,16 @@ class PhpStan extends Plugin
      */
     public function execute()
     {
-        $phpstan = $this->executable;
+        $phpStan = $this->executable;
 
         if (!$this->build->isDebug()) {
             $this->builder->logExecOutput(false);
         }
 
         $this->builder->executeCommand(
-            'cd "%s" && ' . $phpstan . ' analyze --error-format=json "%s"',
+            'cd "%s" && ' . $phpStan . ' analyze --error-format=json %s',
             $this->builder->buildPath,
-            $this->directory
+            implode(' ', $this->directories)
         );
         $this->builder->logExecOutput(true);
 
@@ -117,7 +131,7 @@ class PhpStan extends Plugin
      */
     public static function pluginName()
     {
-        return 'phpstan';
+        return 'php_stan';
     }
 
     /**

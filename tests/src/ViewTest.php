@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace Tests\PHPCensor;
 
-use Exception;
+use PHPCensor\Common\Exception\RuntimeException;
 use PHPCensor\View;
 use PHPUnit\Framework\TestCase;
 
@@ -14,11 +16,10 @@ class ViewTest extends TestCase
         self::assertTrue($view->render() == 'Hello');
     }
 
-    /**
-     * @expectedException Exception
-     */
     public function testInvalidView()
     {
+        self::expectException(RuntimeException::class);
+
         new View('dogs', ROOT_DIR . 'tests/data/View/');
     }
 
@@ -28,6 +29,7 @@ class ViewTest extends TestCase
         $view->who = 'World';
 
         self::assertTrue(isset($view->who));
+        self::assertEquals('World', $view->who);
         self::assertFalse(isset($view->what));
         self::assertTrue($view->render() == 'Hello World');
     }

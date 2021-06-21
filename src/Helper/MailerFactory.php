@@ -36,11 +36,8 @@ class MailerFactory
     public function getSwiftMailerFromConfig()
     {
         if ($this->getMailConfig('smtp_address')) {
-            $encryptionType = $this->getMailConfig('smtp_encryption');
-
-            // Workaround issue where smtp_encryption could == 1 in the past by
-            // checking it is a valid transport
-            if ($encryptionType && !in_array($encryptionType, stream_get_transports())) {
+            $encryptionType = (string)$this->getMailConfig('smtp_encryption');
+            if (!$encryptionType) {
                 $encryptionType = null;
             }
 
@@ -67,22 +64,18 @@ class MailerFactory
      */
     public function getMailConfig($configName)
     {
-        if (isset($this->emailConfig[$configName]) && $this->emailConfig[$configName] != "") {
+        if (isset($this->emailConfig[$configName]) && '' !== $this->emailConfig[$configName]) {
             return $this->emailConfig[$configName];
         } else {
-            // Check defaults
-
             switch ($configName) {
-                case 'smtp_address':
-                    return "";
                 case 'default_mailto_address':
+                case 'smtp_encryption':
                     return null;
                 case 'smtp_port':
                     return '25';
-                case 'smtp_encryption':
-                    return null;
+                case 'smtp_address':
                 default:
-                    return "";
+                    return '';
             }
         }
     }

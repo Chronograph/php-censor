@@ -16,13 +16,14 @@
 
 PHP Censor versions:
 
-| Version | Branch        | Status                              | Minimal PHP Version |
-|:-------:|:-------------:|:------------------------------------|:-------------------:|
-| `1.0`   | `release-1.0` | Old version (Unsupported)           | `5.6`               |
-| `1.1`   | `release-1.1` | Old version (Unsupported)           | `5.6`               |
-| `1.2`   | `release-1.2` | Current stable version (Only fixes) | `5.6`               |
-| `2.0`   | `master`      | Next major version (WIP)            | `7.1`               |
-
+| Version              | Latest   | Branch        | Status                              | Minimal PHP Version |
+| :------------------: | :------: | :-----------: | :---------------------------------: | :-----------------: |
+| `1.0` (Morty Smith)  | `1.0.16` | `release-1.0` | Old version (**UNSUPPORTED**)       | `>=5.6, <8.0`       |
+| `1.1` (Birdperson)   | `1.1.6`  | `release-1.1` | Old version (**UNSUPPORTED**)       | `>=5.6, <8.0`       |
+| `1.2` (Summer Smith) | `1.2.4`  | `release-1.2` | Old version (**UNSUPPORTED**)       | `>=5.6, <8.0`       |
+| `1.3` (Jerry Smith)  | `1.3.2`  | `release-1.3` | Old stable version (**ONLY FIXES**) | `>=5.6, <8.0`       |
+| `2.0` (Rick Sanchez) | `2.0.2`  | `release-2.0` | Current stable version              | `>=7.4`             |
+| `2.1`                | WIP      | `master`      | Feature minor version (WIP)         | `>=7.4`             |
 
 [![Dashboard](docs/screenshots/dashboard.png)](docs/screenshots/dashboard.png)
 
@@ -45,7 +46,7 @@ More [screenshots](docs/en/screenshots.md).
 
 * Unix-like OS (**Windows isn't supported**);
 
-* PHP 7.1+ (with OpenSSL support and enabled functions: `exec()`, `shell_exec()` and `proc_open()`);
+* PHP 7.4+ (with OpenSSL support and enabled functions: `exec()`, `shell_exec()` and `proc_open()`);
 
 * Web-server (Nginx or Apache2);
 
@@ -124,6 +125,7 @@ cd ./php-censor.local
 
 # Non-interactive installation
 ./bin/console php-censor:install \
+    --url='http://php-censor.local' \
     --db-type=pgsql \
     --db-host=localhost \
     --db-pgsql-sslmode=prefer \
@@ -232,7 +234,7 @@ test:
   php_cpd:
     allow_failures: true
 complete:
-  email:
+  email_notify:
     default_mailto_address: admin@php-censor.local
 ```
 

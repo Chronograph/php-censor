@@ -2,7 +2,6 @@
 
 namespace PHPCensor\Controller;
 
-use Exception;
 use JasonGrimes\Paginator;
 use PHPCensor;
 use PHPCensor\BuildFactory;
@@ -16,56 +15,48 @@ use PHPCensor\Model\Project;
 use PHPCensor\Service\BuildService;
 use PHPCensor\Service\ProjectService;
 use PHPCensor\Store\BuildStore;
-use PHPCensor\Store\Factory;
 use PHPCensor\Store\ProjectStore;
 use PHPCensor\View;
 use PHPCensor\WebController;
 use PHPCensor\Helper\Branch;
 use PHPCensor\Store\EnvironmentStore;
+use PHPCensor\Common\Exception\RuntimeException;
 
 /**
- * Project Controller - Allows users to create, edit and view projects.
+ * @package    PHP Censor
+ * @subpackage Application
  *
  * @author Dan Cryer <dan@block8.co.uk>
+ * @author Dmitry Khomutov <poisoncorpsee@gmail.com>
  */
 class ProjectController extends WebController
 {
-    /**
-     * @var string
-     */
-    public $layoutName = 'layout';
+    public string $layoutName = 'layout';
 
-    /**
-     * @var ProjectStore
-     */
-    protected $projectStore;
+    protected ProjectStore $projectStore;
 
-    /**
-     * @var ProjectService
-     */
-    protected $projectService;
+    protected ProjectService $projectService;
 
-    /**
-     * @var BuildStore
-     */
-    protected $buildStore;
+    protected BuildStore $buildStore;
 
-    /**
-     * @var BuildService
-     */
-    protected $buildService;
+    protected BuildService $buildService;
 
     /**
      * Initialise the controller, set up stores and services.
      */
-    public function init()
+    public function init(): void
     {
         parent::init();
 
-        $this->buildStore     = Factory::getStore('Build');
-        $this->projectStore   = Factory::getStore('Project');
-        $this->projectService = new ProjectService($this->projectStore);
-        $this->buildService   = new BuildService($this->buildStore, $this->projectStore);
+        $this->buildStore     = $this->storeRegistry->get('Build');
+        $this->projectStore   = $this->storeRegistry->get('Project');
+        $this->projectService = new ProjectService($this->storeRegistry, $this->projectStore);
+        $this->buildService   = new BuildService(
+            $this->configuration,
+            $this->storeRegistry,
+            $this->buildStore,
+            $this->projectStore
+        );
     }
 
     /**
@@ -115,7 +106,7 @@ class ProjectController extends WebController
 
         /** @var PHPCensor\Model\User $user */
         $user    = $this->getUser();
-        $perPage = $user->getFinalPerPage();
+        $perPage = $user->getFinalPerPage($this->configuration);
         $builds  = $this->getLatestBuildsHtml($projectId, $branch, $environment, (($page - 1) * $perPage), $perPage);
         $pages   = ($builds[1] === 0)
             ? 1
@@ -142,6 +133,7 @@ class ProjectController extends WebController
             $perPage,
             $page
         );
+        $this->view->user = $this->getUser();
 
         $this->layout->title    = $project->getTitle();
         $this->layout->subtitle = '';
@@ -239,8 +231,8 @@ class ProjectController extends WebController
         $environmentId = null;
         if ($environment) {
             /** @var EnvironmentStore $environmentStore */
-            $environmentStore  = Factory::getStore('Environment');
-            $environmentObject = $environmentStore->getByName($environment);
+            $environmentStore  = $this->storeRegistry->get('Environment');
+            $environmentObject = $environmentStore->getByNameAndProjectId($environment, $project->getId());
             if ($environmentObject) {
                 $environmentId = $environmentObject->getId();
             }
@@ -346,8 +338,8 @@ class ProjectController extends WebController
 
         if (!empty($environment)) {
             /** @var EnvironmentStore $environmentStore */
-            $environmentStore  = Factory::getStore('Environment');
-            $environmentObject = $environmentStore->getByName($environment);
+            $environmentStore  = $this->storeRegistry->get('Environment');
+            $environmentObject = $environmentStore->getByNameAndProjectId($environment, $projectId);
             if ($environmentObject) {
                 $criteria['environment_id'] = $environmentObject->getId();
             }
@@ -362,10 +354,12 @@ class ProjectController extends WebController
         $view   = new View('Project/ajax-builds');
 
         foreach ($builds['items'] as &$build) {
-            $build = BuildFactory::getBuild($build);
+            $build = BuildFactory::getBuild($this->configuration, $this->storeRegistry, $build);
         }
 
-        $view->builds = $builds['items'];
+        $view->builds           = $builds['items'];
+        $view->environmentStore = $this->storeRegistry->get('Environment');
+        $view->user             = $this->getUser();
 
         return [
             $view->render(),
@@ -386,7 +380,7 @@ class ProjectController extends WebController
         $values['default_branch'] = null;
 
         if ($method !== 'POST') {
-            $sshKey = new SshKey();
+            $sshKey = new SshKey($this->configuration);
             $key    = $sshKey->generate();
 
             $values['ssh_private_key'] = $key['ssh_private_key'];
@@ -410,8 +404,8 @@ class ProjectController extends WebController
             $defaultBranch = $this->getParam('default_branch', null);
 
             $options = [
-                'ssh_private_key'        => $this->getParam('ssh_private_key', null),
-                'ssh_public_key'         => $this->getParam('ssh_public_key', null),
+                'ssh_private_key'        => \str_replace("\r", "", $this->getParam('ssh_private_key', null)),
+                'ssh_public_key'         => \str_replace("\r", "", $this->getParam('ssh_public_key', null)),
                 'overwrite_build_config' => (bool)$this->getParam('overwrite_build_config', true),
                 'build_config'           => $this->getParam('build_config', null),
                 'allow_public_status'    => (bool)$this->getParam('allow_public_status', false),
@@ -494,8 +488,8 @@ class ProjectController extends WebController
         $formValues    = $form->getValues();
 
         $options = [
-            'ssh_private_key'        => $this->getParam('ssh_private_key', null),
-            'ssh_public_key'         => $this->getParam('ssh_public_key', null),
+            'ssh_private_key'        => \str_replace("\r", "", $this->getParam('ssh_private_key', null)),
+            'ssh_public_key'         => \str_replace("\r", "", $this->getParam('ssh_public_key', null)),
             'overwrite_build_config' => (bool)$this->getParam('overwrite_build_config', false),
             'build_config'           => isset($formValues['build_config']) ? $formValues['build_config'] : null,
             'allow_public_status'    => (bool)$this->getParam('allow_public_status', false),
@@ -611,9 +605,9 @@ class ProjectController extends WebController
         $field = Form\Element\Select::create('group_id', Lang::get('project_group'), true);
         $field->setClass('form-control')->setContainerClass('form-group')->setValue(null);
 
-        $groups = [];
-        $groupStore = Factory::getStore('ProjectGroup');
-        $groupList = $groupStore->getWhere([], 100, 0, ['title' => 'ASC']);
+        $groups     = [];
+        $groupStore = $this->storeRegistry->get('ProjectGroup');
+        $groupList  = $groupStore->getWhere([], 100, 0, ['title' => 'ASC']);
 
         foreach ($groupList['items'] as $group) {
             $groups[$group->getId()] = $group->getTitle();
@@ -692,9 +686,9 @@ class ProjectController extends WebController
             ];
 
             if (in_array($type, $validators) && !preg_match($validators[$type]['regex'], $val)) {
-                throw new Exception($validators[$type]['message']);
+                throw new RuntimeException($validators[$type]['message']);
             } elseif (Project::TYPE_LOCAL === $type && !is_dir($val)) {
-                throw new Exception(Lang::get('error_path'));
+                throw new RuntimeException(Lang::get('error_path'));
             }
 
             return true;

@@ -2,13 +2,20 @@
 
 namespace PHPCensor\Helper;
 
-use PHPCensor\Config;
+use PHPCensor\ConfigurationInterface;
 
 /**
  * Helper class for dealing with SSH keys.
  */
 class SshKey
 {
+    protected ConfigurationInterface $configuration;
+
+    public function __construct(ConfigurationInterface $configuration)
+    {
+        $this->configuration = $configuration;
+    }
+
     /**
      * Uses ssh-keygen to generate a public/private key pair.
      *
@@ -16,11 +23,11 @@ class SshKey
      */
     public function generate()
     {
-        $tempPath = sys_get_temp_dir() . '/';
-        $keyFile  = $tempPath . md5(microtime(true));
+        $tempPath = \sys_get_temp_dir() . '/';
+        $keyFile  = $tempPath . \md5(\microtime(true));
 
-        if (!is_dir($tempPath)) {
-            mkdir($tempPath);
+        if (!\is_dir($tempPath)) {
+            \mkdir($tempPath);
         }
 
         $return = [
@@ -28,11 +35,11 @@ class SshKey
             'ssh_public_key'  => ''
         ];
 
-        $sshStrength = Config::getInstance()->get('php-censor.ssh.strength', 2048);
-        $sshComment  = Config::getInstance()->get('php-censor.ssh.comment', 'admin@php-censor');
+        $sshStrength = $this->configuration->get('php-censor.ssh.strength', 2048);
+        $sshComment  = $this->configuration->get('php-censor.ssh.comment', 'admin@php-censor');
 
-        $output = @shell_exec(
-            sprintf(
+        $output = @\shell_exec(
+            \sprintf(
                 'ssh-keygen -t rsa -b %s -f %s -N "" -C "%s"',
                 $sshStrength,
                 $keyFile,
@@ -41,15 +48,15 @@ class SshKey
         );
 
         if (!empty($output)) {
-            $pub = file_get_contents($keyFile . '.pub');
-            $prv = file_get_contents($keyFile);
+            $publicKey  = \file_get_contents($keyFile . '.pub');
+            $privateKey = \file_get_contents($keyFile);
 
-            if (!empty($pub)) {
-                $return['ssh_public_key'] = $pub;
+            if (!empty($publicKey)) {
+                $return['ssh_public_key'] = $publicKey;
             }
 
-            if (!empty($prv)) {
-                $return['ssh_private_key'] = $prv;
+            if (!empty($privateKey)) {
+                $return['ssh_private_key'] = $privateKey;
             }
         }
 
